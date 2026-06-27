@@ -95,7 +95,7 @@ const IDENTIFIER_TYPE_LABEL: Record<Report["reportedIdentifierType"], string> = 
   x_post:       "X post",
 };
 
-const REPORTS: Report[] = [
+let REPORTS: Report[] = [
   {
     id: "SR-2024-0352",
     reportedIdentifier:     "linkedin.com/in/jordan-lee-recruiting",
@@ -263,6 +263,16 @@ const REPORTS: Report[] = [
     subagentsActive: false,
   },
 ];
+
+async function loadAttioReports(): Promise<Report[]> {
+  const response = await fetch("/api/attio/reports");
+  if (!response.ok) {
+    throw new Error(`Unable to load Attio reports: ${response.status}`);
+  }
+
+  const payload = await response.json() as { reports?: Report[] };
+  return Array.isArray(payload.reports) && payload.reports.length > 0 ? payload.reports : REPORTS;
+}
 
 const ALERTS: Alert[] = [
   { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: payment request detected in the submitted material. Zelle amount: $2,400. Do not send funds.", read: false },
@@ -3371,6 +3381,25 @@ export default function App() {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [, setReportsVersion] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    loadAttioReports()
+      .then((reports) => {
+        if (!mounted) return;
+        REPORTS = reports;
+        setReportsVersion((version) => version + 1);
+      })
+      .catch((error) => {
+        console.warn(error);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   function handleSelectReport(id: string) {
     setSelectedReportId(id);

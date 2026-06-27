@@ -33,6 +33,8 @@ pnpm build
 pnpm dev
 ```
 
+To load the demo reports from Attio during local development, start Vite with `ATTIO_API_KEY` set in your shell. If the key is not set, the UI falls back to the bundled mock data.
+
 ## Load Extension
 
 1. Run `pnpm build`.
