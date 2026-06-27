@@ -3262,16 +3262,16 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
       }
     } else {
       // No SIE endpoint configured — show a placeholder verdict
-      setVerdict({ score: 0, label: "clean", reason: "Live analysis unavailable: VITE_SIE_URL is not set." });
+      setVerdict({ input: text.trim(), scamScore: 0, label: "clean", reason: "Live analysis unavailable: VITE_SIE_URL is not set." });
     }
 
     setAnalyzing(false);
   }
 
   function verdictRiskLevel(v: SIEVerdict): keyof typeof RISK_CONFIG {
-    if (v.score >= 8) return "RED";
-    if (v.score >= 6) return "ORANGE";
-    if (v.score >= 4) return "YELLOW";
+    if (v.scamScore >= 8) return "RED";
+    if (v.scamScore >= 6) return "ORANGE";
+    if (v.scamScore >= 4) return "YELLOW";
     return "GREEN";
   }
 
@@ -3394,7 +3394,7 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
                   color: RISK_CONFIG[verdictRiskLevel(verdict)].color,
                 }}
               >
-                {verdict.score}
+                {verdict.scamScore}
               </div>
               <div className="flex flex-col gap-1">
                 <RiskBadge level={verdictRiskLevel(verdict)} />
@@ -3408,10 +3408,10 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Similar record */}
-            {verdict.topSimilarText && (
+            {verdict.topSimilarRecord && (
               <div className="p-3 border border-amber-500/20" style={{ background: "rgba(245,158,11,0.06)" }}>
                 <p className="text-[10px] font-medium text-amber-400/80 mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>MOST SIMILAR PREVIOUS SUBMISSION</p>
-                <p className="text-[10px] text-muted-foreground leading-relaxed truncate">{verdict.topSimilarText}</p>
+                <Monospace className="text-[10px] text-amber-400/70">{verdict.topSimilarRecord}</Monospace>
               </div>
             )}
 

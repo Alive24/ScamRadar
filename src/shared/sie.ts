@@ -3,10 +3,11 @@ import { SIEClient } from "@superlinked/sie-sdk";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SIEVerdict {
-  score: number;
+  input: string;
+  scamScore: number;
   label: "clean" | "suspicious" | "scam";
   reason: string;
-  topSimilarText?: string;
+  topSimilarRecord?: string;
 }
 
 interface VectorRecord {
@@ -88,7 +89,7 @@ Message to analyse:
     }
 
     // ── Step 2: Cross-encoder rerank against stored records ──────────────────
-    let topSimilarText: string | undefined;
+    let topSimilarRecord: string | undefined;
 
     if (vectorStore.length > 0) {
       const reranked = await client.score(
@@ -99,7 +100,7 @@ Message to analyse:
 
       if (reranked.scores.length > 0) {
         const topIdx = parseInt(reranked.scores[0].itemId.replace("item-", ""), 10);
-        topSimilarText = vectorStore[topIdx]?.text;
+        topSimilarRecord = vectorStore[topIdx]?.id;
       }
     }
 
@@ -111,10 +112,11 @@ Message to analyse:
     });
 
     return {
-      score:  verdict.score,
-      label:  verdict.label as SIEVerdict["label"],
-      reason: verdict.reason,
-      topSimilarText,
+      input:           text,
+      scamScore:       verdict.score,
+      label:           verdict.label as SIEVerdict["label"],
+      reason:          verdict.reason,
+      topSimilarRecord,
     };
   } finally {
     await client.close();
