@@ -32,7 +32,7 @@ interface Report {
   id: string;
   // identifier this user submitted — stored on the server, shown to the submitter
   reportedIdentifier: string;
-  reportedIdentifierType: "linkedin_url" | "email" | "domain" | "github_url" | "wallet" | "phone" | "ebay_handle";
+  reportedIdentifierType: "linkedin_url" | "email" | "domain" | "github_url" | "wallet" | "phone" | "ebay_handle" | "x_post";
   // how many users reported the same suspect (fuzzy-matched server-side)
   corroborationCount: number;
   type: string;
@@ -92,6 +92,7 @@ const IDENTIFIER_TYPE_LABEL: Record<Report["reportedIdentifierType"], string> = 
   wallet:       "Wallet address",
   phone:        "Phone number",
   ebay_handle:  "eBay handle",
+  x_post:       "X post",
 };
 
 const REPORTS: Report[] = [
@@ -118,6 +119,32 @@ const REPORTS: Report[] = [
         desensitized: "Recruiter on [PLATFORM] reached out about a [ROLE] at a [COMPANY_STAGE] startup. Asked for CV and availability. No payment, credentials, or identity documents requested, but company identity is not yet verified.",
         indicators: ["Vague company details", "Affiliation unverified"],
         submittedAt: "Just now",
+      },
+    ],
+  },
+  {
+    id: "SR-2024-0361",
+    reportedIdentifier:     "x.com/market_sentinel/status/1805123409876543210",
+    reportedIdentifierType: "x_post",
+    corroborationCount:     9,
+    type: "Fake News / Misinformation",
+    platform: "X",
+    risk: "ORANGE",
+    score: 76,
+    status: "ACCEPTED",
+    lastActivity: "12m ago",
+    indicators: ["No official source", "Manipulated screenshot pattern", "Reused breaking-news template", "External monetized link"],
+    summary: "Viral X post claims an immediate UK student visa rule change and links to a paid guidance page. Agent checks found no matching GOV.UK update, the screenshot layout differs from official pages, and similar panic posts reuse the same wording.",
+    subagentsActive: true,
+    communitySubmissions: [
+      {
+        isMine: true,
+        platform: "X",
+        materialType: "Post URL + screenshot",
+        myRaw: "X post claims: BREAKING: UK student visa sponsorship ends tomorrow for most international applicants. It links to visa-update-uk.example.com and tells students to pay for urgent document review.",
+        desensitized: "[SOCIAL_POST] claims a sudden immigration-rule change, includes a screenshot styled like an official notice, and links to [EXTERNAL_DOMAIN] for urgent paid document review.",
+        indicators: ["No official source", "External monetized link", "Urgency pressure"],
+        submittedAt: "Today 15:45",
       },
     ],
   },
@@ -241,6 +268,7 @@ const ALERTS: Alert[] = [
   { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: payment request detected in the submitted material. Zelle amount: $2,400. Do not send funds.", read: false },
   { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: wallet address collection detected. Do not share crypto credentials.", read: false },
   { id: 3, time: "09:31", severity: "CRITICAL", reportId: "SR-2024-0339", suspect: "github.com/northstar-labs/frontend-takehome", message: "Cloud code agent found a malicious postinstall script. Do not run npm install or repo scripts.", read: false },
+  { id: 7, time: "09:18", severity: "HIGH",     reportId: "SR-2024-0361", suspect: "x.com/market_sentinel/status/1805123409876543210", message: "Source-check agent found no official GOV.UK match for the viral visa-change claim. Do not repost or pay through linked pages.", read: false },
   { id: 4, time: "08:55", severity: "MEDIUM",   reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: 14 corroborating reports matched this suspect. Pattern confidence: 94%.", read: true },
   { id: 5, time: "08:12", severity: "MEDIUM",   reportId: "SR-2024-0335", suspect: "marketplace_seller_99",                 message: "Server update: fake escrow pattern matches 6 prior reports for this suspect.", read: true },
   { id: 6, time: "07:44", severity: "HIGH",     reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: associated wallet 0x7a3f…c82e flagged by external risk sources.", read: true },
@@ -1668,7 +1696,7 @@ function SuspectsView({ onSelectSuspect }: { onSelectSuspect: (id: string) => vo
 
 type ExtStep = "home" | "scanning" | "alert" | "summary" | "chat" | "report" | "reportDetail" | "suspect" | "suspectDetail";
 type BotMsgKind = "text" | "confirm" | "warning" | "safe" | "caution" | "report";
-type DemoWorkflowId = "linkedin" | "ebay" | "github" | "gemini";
+type DemoWorkflowId = "linkedin" | "ebay" | "github" | "xnews" | "gemini";
 type PageVerdict = "suspect" | "trusted" | "caution" | null;
 
 interface BotMessage {
@@ -1682,6 +1710,7 @@ const IDENTIFIER_OPTIONS = [
   { label: "Email Address",     type: "email",         icon: <Mail size={12} />,       placeholder: "name@domain.com" },
   { label: "eBay Shop / Item",  type: "ebay_handle",   icon: <Package size={12} />,    placeholder: "eBay username or item URL" },
   { label: "GitHub Profile",    type: "github_url",    icon: <GitBranch size={12} />,  placeholder: "github.com/username or paste URL" },
+  { label: "X Post",            type: "x_post",        icon: <MessageSquare size={12} />, placeholder: "x.com/user/status/… or paste post URL" },
   { label: "Wallet / Crypto",   type: "wallet",        icon: <Wallet size={12} />,     placeholder: "0x… or wallet address" },
   { label: "Domain / URL",      type: "domain",        icon: <Globe size={12} />,      placeholder: "example.com or full URL" },
   { label: "Phone Number",      type: "phone",         icon: <Phone size={12} />,      placeholder: "+1 (555) 000-0000" },
@@ -1808,6 +1837,34 @@ const DEMO_WORKFLOWS: Record<DemoWorkflowId, {
       "Do not clone it into a machine with credentials",
       "Preserve the repo URL and cloud-agent findings",
       "Submit a report so the agent can aggregate related attempts",
+    ],
+  },
+  xnews: {
+    label: "X fake news post",
+    shortLabel: "X News",
+    url: "x.com/market_sentinel/status/1805123409876543210",
+    identifierLabel: "X Post",
+    identifierValue: "x.com/market_sentinel/status/1805123409876543210",
+    reportId: "SR-2024-0361",
+    suspectId: "SR-2024-0361",
+    risk: "ORANGE",
+    score: 76,
+    confidence: "84%",
+    status: "suspect",
+    confirmCopy: "Captured the X post, screenshot-style image, linked domain, and viral claim. I’m checking official sources, image provenance, repost clusters, and monetized links.",
+    resultCopy: "High-risk misinformation indicators are present. Source-check agents found no matching official GOV.UK update, the screenshot differs from official page structure, and similar posts reuse the same breaking-news wording while pushing users to an external paid guidance page. Do not repost, click the linked page, or pay for urgent review based on this post.",
+    reportCopy: "Report SR-2024-0361 accepted. I attached the X post URL, screenshot claim, linked domain, source-check result, reused wording cluster, and safe next-step guidance.",
+    indicators: [
+      { label: "No matching official source found", sev: "HIGH" },
+      { label: "Screenshot layout differs from official pages", sev: "MED" },
+      { label: "Reused panic wording across similar posts", sev: "MED" },
+      { label: "External paid guidance link attached", sev: "HIGH" },
+    ],
+    recommendations: [
+      "Do not repost or amplify the claim",
+      "Do not click or pay through the linked page",
+      "Check GOV.UK or official channels directly",
+      "Submit a report so the agent can track the spread pattern",
     ],
   },
   gemini: {
@@ -2184,7 +2241,7 @@ function ExtensionView() {
         </div>
 
         <div className="px-8 pt-5 max-w-2xl mx-auto">
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-5 gap-2 mb-4">
             {(Object.keys(DEMO_WORKFLOWS) as DemoWorkflowId[]).map(id => {
               const item = DEMO_WORKFLOWS[id];
               return (
@@ -2196,7 +2253,7 @@ function ExtensionView() {
                 >
                   <div className="text-[10px] font-semibold" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>{item.shortLabel}</div>
                   <div className="text-[9px] mt-0.5 text-white/35" style={{ fontFamily: "var(--font-data)" }}>
-                    {id === "linkedin" ? "REPORT FLOW" : item.status === "trusted" ? "TRUSTED FLOW" : item.status === "caution" ? "CAUTION FLOW" : "STOP FLOW"}
+                    {id === "linkedin" ? "REPORT FLOW" : id === "xnews" ? "SOURCE CHECK" : item.status === "trusted" ? "TRUSTED FLOW" : item.status === "caution" ? "CAUTION FLOW" : "STOP FLOW"}
                   </div>
                 </button>
               );
@@ -2282,6 +2339,46 @@ function ExtensionView() {
                   <div className="rounded border border-red-500/25 bg-red-500/10 p-3 text-xs text-red-200/90">
                     Cloud agent result: package.json contains a postinstall path that loads scripts/telemetry-check.js before tests run.
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeWorkflow === "xnews" && (
+            <div className="rounded-lg overflow-hidden mb-4" style={{ background: "#000", color: "#e7e9ea", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid #2f3336" }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center text-sm font-bold">X</div>
+                  <div>
+                    <div className="text-sm font-semibold">Market Sentinel</div>
+                    <div className="text-xs text-white/45">@market_sentinel · 18m</div>
+                  </div>
+                </div>
+                <div className="px-2 py-1 rounded-full text-xs" style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24" }}>Source check</div>
+              </div>
+              <div className="p-5">
+                <div className="text-base font-semibold text-white/90 mb-2">BREAKING: UK student visa sponsorship ends tomorrow for most international applicants</div>
+                <p className="text-sm leading-relaxed text-white/70">
+                  Students have less than 24 hours to prepare documents. We found the emergency update before most schools announced it. Use our urgent review link before applications close.
+                </p>
+                <div className="mt-3 rounded-lg border overflow-hidden" style={{ borderColor: "#2f3336", background: "#111" }}>
+                  <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "#2f3336" }}>
+                    <Globe size={13} className="text-white/55" />
+                    <span className="text-xs text-white/55" style={{ fontFamily: "var(--font-data)" }}>GOV.UK screenshot</span>
+                  </div>
+                  <div className="p-4 space-y-2">
+                    <div className="h-3 w-28 bg-white/20 rounded" />
+                    <div className="h-3 w-full bg-white/10 rounded" />
+                    <div className="h-3 w-4/5 bg-white/10 rounded" />
+                    <div className="mt-3 rounded border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-200/90">
+                      Linked page: visa-update-uk.example.com/urgent-review
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-white/45">
+                  <div>8.2K reposts</div>
+                  <div>1.4K quotes</div>
+                  <div>21K likes</div>
                 </div>
               </div>
             </div>
@@ -2476,7 +2573,7 @@ function ExtensionView() {
                               STOP BEFORE ACTING
                             </div>
                             <p className="text-[10px] text-red-200/85 leading-relaxed mt-1" style={{ fontFamily: "var(--font-body)" }}>
-                              Do not pay, run code, share credentials, or move off-platform until independently verified.
+                              {activeWorkflow === "xnews" ? "Do not repost, click linked pages, or pay for urgent help until the claim is verified through official sources." : "Do not pay, run code, share credentials, or move off-platform until independently verified."}
                             </p>
                           </div>
                         </div>
