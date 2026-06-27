@@ -7,7 +7,7 @@ import {
   Globe, Mail, Phone, Wallet,
   FileText, Clock,
   ChevronRight,
-  MessageSquare, Send,
+  MessageSquare, Send, Camera, Mic,
   Plus, Upload, Paperclip, X,
   CheckCircle, XCircle,
   Network, BarChart2,
@@ -1640,14 +1640,13 @@ function SuspectsView({ onSelectSuspect }: { onSelectSuspect: (id: string) => vo
 
 // ─── Extension View ───────────────────────────────────────────────────────────
 
-type ExtStep = "chatbot" | "scanning" | "alert" | "summary" | "chat";
-type BotMsgKind = "text" | "type_buttons" | "value_input" | "confirm" | "scanning";
+type ExtStep = "home" | "scanning" | "alert" | "summary" | "chat" | "report" | "reportDetail" | "suspect" | "suspectDetail";
+type BotMsgKind = "text" | "confirm" | "warning";
 
 interface BotMessage {
   role: "bot" | "user";
   kind: BotMsgKind;
   content: string;
-  selectedType?: string;
 }
 
 const IDENTIFIER_OPTIONS = [
@@ -1662,8 +1661,7 @@ const IDENTIFIER_OPTIONS = [
 ];
 
 const GREETING: BotMessage[] = [
-  { role: "bot", kind: "text", content: "Hi! I'm ScamRadar. What would you like me to check?" },
-  { role: "bot", kind: "type_buttons", content: "" },
+  { role: "bot", kind: "text", content: "What do you want me to check? Paste a message, link, wallet, repo, or email here, or use the screen check to analyze the visible page." },
 ];
 
 const RESULT_INDICATORS = [
@@ -1682,19 +1680,151 @@ const SAFE_STEPS = [
   "Report to LinkedIn Trust & Safety",
 ];
 
+type ExtensionSessionKey = "current" | "previous";
+
+interface ExtensionSessionSnapshot {
+  botMessages: BotMessage[];
+  selectedType: typeof IDENTIFIER_OPTIONS[number] | null;
+  confirmedIdentifier: { label: string; value: string } | null;
+  valueInput: string;
+  promptInput: string;
+  createdAt: string;
+}
+
+function formatSessionTime(date = new Date()) {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function createEmptyExtensionSession(): ExtensionSessionSnapshot {
+  return {
+    botMessages: GREETING,
+    selectedType: null,
+    confirmedIdentifier: null,
+    valueInput: "",
+    promptInput: "",
+    createdAt: formatSessionTime(),
+  };
+}
+
+const PREVIOUS_EXTENSION_SESSION: ExtensionSessionSnapshot = {
+  botMessages: [
+    ...GREETING,
+    { role: "bot", kind: "text", content: "Loaded the saved recruiter check. You can continue asking questions or open the matched suspect below." },
+    {
+      role: "bot",
+      kind: "warning",
+      content: "This saved investigation found high-risk indicators: upfront equipment payment, off-platform redirect, and repeated reports using the same outreach pattern.",
+    },
+  ],
+  selectedType: null,
+  confirmedIdentifier: { label: "LinkedIn Profile", value: "linkedin.com/in/alex-morgan-recruiter" },
+  valueInput: "",
+  promptInput: "",
+  createdAt: "09:44",
+};
+
+function sessionDisplayName(snapshot: ExtensionSessionSnapshot) {
+  const identifier = snapshot.confirmedIdentifier?.value ?? "Unidentified";
+  return `${identifier} · ${snapshot.createdAt}`;
+}
+
 function ExtensionView() {
-  const [step, setStep] = useState<ExtStep>("chatbot");
+  const [step, setStep] = useState<ExtStep>("home");
+  const [selectedExtensionReportId, setSelectedExtensionReportId] = useState(REPORTS[0].id);
+  const [selectedExtensionSuspectId, setSelectedExtensionSuspectId] = useState(REPORTS[0].id);
   const [botMessages, setBotMessages] = useState<BotMessage[]>(GREETING);
   const [selectedType, setSelectedType] = useState<typeof IDENTIFIER_OPTIONS[number] | null>(null);
+  const [confirmedIdentifier, setConfirmedIdentifier] = useState<{ label: string; value: string } | null>(null);
+  const [activeSession, setActiveSession] = useState<ExtensionSessionKey>("current");
   const [valueInput, setValueInput] = useState("");
+  const [promptInput, setPromptInput] = useState("");
   const [qaMessages, setQaMessages] = useState<ChatMessage[]>([]);
   const [qaInput, setQaInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const identifierInputRef = useRef<HTMLInputElement>(null);
+  const sessionSnapshotsRef = useRef<Record<ExtensionSessionKey, ExtensionSessionSnapshot>>({
+    current: createEmptyExtensionSession(),
+    previous: PREVIOUS_EXTENSION_SESSION,
+  });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [botMessages, qaMessages]);
+
+  function appendInlineInvestigationResult() {
+    setBotMessages(prev => [
+      ...prev,
+      {
+        role: "bot",
+        kind: "warning",
+        content: "High-risk indicators are present: the material includes an upfront payment/equipment request, an off-platform redirect, and similar prior reports. Pause before taking the requested action.",
+      },
+    ]);
+  }
+
+  function captureSessionSnapshot(): ExtensionSessionSnapshot {
+    return {
+      botMessages,
+      selectedType,
+      confirmedIdentifier,
+      valueInput,
+      promptInput,
+      createdAt: sessionSnapshotsRef.current[activeSession].createdAt,
+    };
+  }
+
+  function applySessionSnapshot(snapshot: ExtensionSessionSnapshot) {
+    setBotMessages(snapshot.botMessages);
+    setSelectedType(snapshot.selectedType);
+    setConfirmedIdentifier(snapshot.confirmedIdentifier);
+    setValueInput(snapshot.valueInput);
+    setPromptInput(snapshot.promptInput);
+    setQaMessages([]);
+  }
+
+  function matchCurrentPageSuspect() {
+    setSelectedExtensionSuspectId(REPORTS[0].id);
+    setConfirmedIdentifier({ label: "LinkedIn Profile", value: "linkedin.com/in/alex-morgan-recruiter" });
+  }
+
+  function runPrompt(value: string) {
+    const val = value.trim();
+    if (!val) return;
+    setBotMessages(prev => [
+      ...prev,
+      { role: "user", kind: "text", content: val },
+      { role: "bot",  kind: "confirm", content: "Got it. I’m checking the current page context, extracted identifiers, risky asks, and similar reports." },
+    ]);
+    setPromptInput("");
+    setTimeout(appendInlineInvestigationResult, 650);
+  }
+
+  function runScreenshotCheck() {
+    matchCurrentPageSuspect();
+    setBotMessages(prev => [
+      ...prev,
+      { role: "user", kind: "text", content: "Check what's on the screen" },
+      {
+        role: "bot",
+        kind: "confirm",
+        content: "Captured the visible page and reading profile text, message content, URL, and visible DOM signals before checking risky asks and similar reports.",
+      },
+    ]);
+    setPromptInput("");
+    setTimeout(appendInlineInvestigationResult, 650);
+  }
+
+  function runVoiceInput() {
+    setBotMessages(prev => [
+      ...prev,
+      { role: "user", kind: "text", content: "Talk" },
+      {
+        role: "bot",
+        kind: "text",
+        content: "Voice input is ready. Tell me what feels suspicious, or describe the message, link, wallet, repo, or request you want checked.",
+      },
+    ]);
+  }
 
   function selectType(opt: typeof IDENTIFIER_OPTIONS[number]) {
     setSelectedType(opt);
@@ -1702,32 +1832,61 @@ function ExtensionView() {
       ...prev,
       { role: "user", kind: "text", content: opt.label },
       { role: "bot",  kind: "text", content: `Got it. Paste the ${opt.label.toLowerCase()} you want me to analyze, or describe what happened.` },
-      { role: "bot",  kind: "value_input", content: "" },
     ]);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setTimeout(() => identifierInputRef.current?.focus(), 50);
   }
 
-  function submitValue() {
+  function submitIdentifier() {
     if (!valueInput.trim() || !selectedType) return;
     const val = valueInput.trim();
+    setConfirmedIdentifier({ label: selectedType.label, value: val });
     setBotMessages(prev => [
-      ...prev.filter(m => m.kind !== "value_input"),
+      ...prev,
       { role: "user", kind: "text", content: val },
-      { role: "bot",  kind: "confirm", content: `Analyzing ${selectedType.label.toLowerCase()}: **${val}**` },
+      { role: "bot",  kind: "confirm", content: `Analyzing ${selectedType.label.toLowerCase()}: ${val}` },
     ]);
+    setSelectedType(null);
     setValueInput("");
-    setTimeout(() => {
-      setStep("scanning");
-      setTimeout(() => setStep("alert"), 1800);
-    }, 600);
+    setTimeout(appendInlineInvestigationResult, 650);
   }
 
   function reset() {
-    setStep("chatbot");
-    setBotMessages(GREETING);
-    setSelectedType(null);
-    setValueInput("");
-    setQaMessages([]);
+    setStep("home");
+    applySessionSnapshot(createEmptyExtensionSession());
+    setSelectedExtensionReportId(REPORTS[0].id);
+    setSelectedExtensionSuspectId(REPORTS[0].id);
+  }
+
+  function startNewSession() {
+    sessionSnapshotsRef.current[activeSession] = captureSessionSnapshot();
+    const fresh = createEmptyExtensionSession();
+    sessionSnapshotsRef.current.current = fresh;
+    setActiveSession("current");
+    setStep("home");
+    applySessionSnapshot(fresh);
+    setSelectedExtensionReportId(REPORTS[0].id);
+    setSelectedExtensionSuspectId(REPORTS[0].id);
+  }
+
+  function getSessionSnapshot(key: ExtensionSessionKey) {
+    return key === activeSession ? captureSessionSnapshot() : sessionSnapshotsRef.current[key];
+  }
+
+  function switchToSession(target: ExtensionSessionKey) {
+    if (target === activeSession) return;
+    sessionSnapshotsRef.current[activeSession] = captureSessionSnapshot();
+    const nextSession = sessionSnapshotsRef.current[target];
+    setStep("home");
+    setActiveSession(target);
+    applySessionSnapshot(nextSession);
+  }
+
+  function openLinkedSession(target: ExtensionSessionKey) {
+    sessionSnapshotsRef.current[activeSession] = captureSessionSnapshot();
+    const nextSession = sessionSnapshotsRef.current[target];
+    setActiveSession(target);
+    applySessionSnapshot(nextSession);
+    setStep("home");
   }
 
   function openQa() {
@@ -1748,7 +1907,18 @@ function ExtensionView() {
     setQaInput("");
   }
 
+  const report = REPORTS.find(item => item.id === selectedExtensionReportId) ?? REPORTS[0];
+  const suspect = REPORTS.find(item => item.id === selectedExtensionSuspectId) ?? REPORTS[0];
   const isResultStep = step === "alert" || step === "summary" || step === "chat";
+  const activePanel = step === "reportDetail" ? "report" : step === "suspectDetail" ? "suspect" : step;
+  const confirmedIdentifierIcon = confirmedIdentifier
+    ? IDENTIFIER_OPTIONS.find(opt => opt.label === confirmedIdentifier.label)?.icon ?? <User size={12} />
+    : null;
+  const sessionOptions: { key: ExtensionSessionKey; snapshot: ExtensionSessionSnapshot }[] = [
+    { key: "current", snapshot: getSessionSnapshot("current") },
+    { key: "previous", snapshot: getSessionSnapshot("previous") },
+  ];
+  const linkedSuspectSessions = sessionOptions.filter(({ snapshot }) => snapshot.confirmedIdentifier?.value === suspect.reportedIdentifier);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -1764,7 +1934,7 @@ function ExtensionView() {
           <div className="flex-1 mx-4 flex items-center gap-2 px-3 py-1 rounded-sm" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <Globe size={11} className="text-muted-foreground flex-shrink-0" />
             <span className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>
-              {selectedType ? `Checking: ${valueInput || selectedType.type}` : "linkedin.com/in/alex-morgan-recruiter"}
+              linkedin.com/in/alex-morgan-recruiter
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -1811,31 +1981,91 @@ function ExtensionView() {
         </div>
       </div>
 
-      {/* Right panel — always visible, switches between chatbot and results */}
-      <div className="flex-shrink-0 flex flex-col border-l border-border overflow-hidden" style={{ width: 340, background: "#0f1219" }}>
+      {/* Right panel — extension surface */}
+      <div className="flex-shrink-0 flex flex-col border-l border-border overflow-hidden" style={{ width: 360, background: "#0f1219" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Radio size={13} className={isResultStep ? "text-red-400" : "text-amber-400"} />
-            <span className="text-xs font-semibold text-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>SCAMRADAR</span>
+        <div className="border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button onClick={reset} className="flex items-center gap-2 text-left">
+              <Radio size={13} className={isResultStep ? "text-red-400" : "text-amber-400"} />
+              <span className="text-xs font-semibold text-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>SCAMRADAR</span>
+            </button>
+            <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Extension</span>
           </div>
-          {isResultStep
-            ? <div className="flex items-center gap-1.5">
-                <Monospace className="text-muted-foreground text-[10px]">SR-2024-0347</Monospace>
-                <button onClick={reset} className="text-muted-foreground hover:text-foreground transition-colors ml-1"><X size={13} /></button>
-              </div>
-            : <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Browser extension</span>
-          }
+          <div className="grid grid-cols-3 border-t border-border">
+            {[
+              { label: "Home", next: "home" as ExtStep },
+              { label: "Reports", next: "report" as ExtStep },
+              { label: "Suspects", next: "suspect" as ExtStep },
+            ].map(item => (
+              <button
+                key={item.label}
+                onClick={() => setStep(item.next)}
+                className={`py-2 text-[10px] border-r border-border last:border-r-0 transition-colors ${
+                  activePanel === item.next ? "text-amber-400 bg-amber-500/10" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                }`}
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 border-t border-border">
+            <div className="relative flex-1">
+              <select
+                value={activeSession}
+                onChange={e => switchToSession(e.currentTarget.value as ExtensionSessionKey)}
+                className="w-full appearance-none px-2.5 py-1.5 pr-7 text-[10px] text-muted-foreground border border-border outline-none hover:text-foreground hover:bg-white/5 transition-colors"
+                style={{ background: "rgba(255,255,255,0.02)", fontFamily: "var(--font-data)" }}
+              >
+                {sessionOptions.map(({ key, snapshot }) => (
+                  <option key={key} value={key}>{sessionDisplayName(snapshot)}</option>
+                ))}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            </div>
+            <button
+              onClick={startNewSession}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-amber-400 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+            >
+              <Plus size={11} /> New
+            </button>
+          </div>
         </div>
 
-        {/* ── CHATBOT INIT PANEL ── */}
-        {!isResultStep && step !== "scanning" && (
+        {/* ── NATURAL LANGUAGE HOME ── */}
+        {step === "home" && (
           <>
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3" style={{ scrollbarWidth: "none" }}>
-              {botMessages.map((msg, i) => (
+              {confirmedIdentifier && (
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2 border border-amber-500/25" style={{ background: "#17140d" }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 flex items-center justify-center text-amber-400 border border-amber-500/25 flex-shrink-0" style={{ background: "rgba(245,158,11,0.08)" }}>
+                      {confirmedIdentifierIcon}
+                    </div>
+                    <div className="min-w-0">
+                    <div className="text-[9px] text-amber-400 font-medium mb-0.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>MATCHED SUSPECT</div>
+                      <Monospace className="text-foreground break-all">{confirmedIdentifier.value}</Monospace>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedExtensionSuspectId(REPORTS[0].id);
+                      setStep("suspectDetail");
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors flex-shrink-0"
+                    style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                  >
+                    <User size={10} /> Open
+                  </button>
+                </div>
+              )}
+              {botMessages.map((msg, i) => {
+                const isConfirmPending = msg.kind === "confirm" && !botMessages.slice(i + 1).some(next => next.kind === "warning");
+                return (
                 <div key={i}>
-                  {/* Bot text bubble */}
                   {msg.role === "bot" && msg.kind === "text" && (
                     <div className="flex items-start gap-2">
                       <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)" }}>
@@ -1847,7 +2077,6 @@ function ExtensionView() {
                       </div>
                     </div>
                   )}
-                  {/* Confirm bubble */}
                   {msg.role === "bot" && msg.kind === "confirm" && (
                     <div className="flex items-start gap-2">
                       <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)" }}>
@@ -1855,12 +2084,92 @@ function ExtensionView() {
                       </div>
                       <div className="px-3 py-2 text-[11px] leading-relaxed max-w-[85%]"
                         style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)", fontFamily: "var(--font-body)" }}>
-                        <Loader2 size={10} className="text-amber-400 animate-spin inline mr-1.5" />
+                        {isConfirmPending ? (
+                          <Loader2 size={10} className="text-amber-400 animate-spin inline mr-1.5" />
+                        ) : (
+                          <CheckCircle size={10} className="text-green-400 inline mr-1.5" />
+                        )}
                         <span className="text-amber-300">{msg.content}</span>
                       </div>
                     </div>
                   )}
-                  {/* User text bubble */}
+                  {msg.role === "bot" && msg.kind === "warning" && (
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)" }}>
+                        <ShieldAlert size={10} className="text-red-400" />
+                      </div>
+                      <div className="max-w-[92%] border border-red-500/25" style={{ background: "rgba(239,68,68,0.08)" }}>
+                        <div className="px-3 py-3 border-b border-red-500/15 flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                            style={{
+                              background: "#dc2626",
+                              clipPath: "polygon(30% 0%,70% 0%,100% 30%,100% 70%,70% 100%,30% 100%,0% 70%,0% 30%)",
+                              fontFamily: "var(--font-display)",
+                              letterSpacing: "0.08em",
+                            }}
+                          >
+                            STOP
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold text-red-300" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                              STOP BEFORE ACTING
+                            </div>
+                            <p className="text-[10px] text-red-200/85 leading-relaxed mt-1" style={{ fontFamily: "var(--font-body)" }}>
+                              Do not pay, run code, share credentials, or move off-platform until independently verified.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="px-3 py-2 border-b border-red-500/15">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TriangleAlert size={12} className="text-red-400 flex-shrink-0" />
+                            <span className="text-[10px] font-bold text-red-400" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>HIGH-RISK INDICATORS</span>
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-red-200/90" style={{ fontFamily: "var(--font-body)" }}>
+                            {msg.content}
+                          </p>
+                        </div>
+                        <div className="px-3 py-2 space-y-1.5">
+                          {RESULT_INDICATORS.slice(1, 4).map(ind => (
+                            <div key={ind.label} className="flex items-start gap-2 text-[10px] text-foreground">
+                              <span className={`mt-0.5 px-1 py-0.5 text-[9px] font-bold ${ind.sev === "HIGH" ? "bg-red-500/15 text-red-400 border border-red-500/25" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}
+                                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                                {ind.sev}
+                              </span>
+                              <span>{ind.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="px-3 pb-3">
+                          <div className="mb-2 text-[10px] text-green-300/90 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                            Recommended: do not send money, do not run code, and verify through an official channel before continuing.
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedExtensionReportId(REPORTS[0].id);
+                                setStep("reportDetail");
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                            >
+                              <FileText size={11} /> View report
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedExtensionSuspectId(REPORTS[0].id);
+                                setStep("suspectDetail");
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                            >
+                              <User size={11} /> View suspect
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {msg.role === "user" && msg.kind === "text" && (
                     <div className="flex justify-end">
                       <div className="px-3 py-2 text-[11px] leading-relaxed text-amber-200 max-w-[85%]"
@@ -1869,60 +2178,124 @@ function ExtensionView() {
                       </div>
                     </div>
                   )}
-                  {/* Type selector buttons */}
-                  {msg.role === "bot" && msg.kind === "type_buttons" && (
-                    <div className="grid grid-cols-2 gap-1.5 mt-1">
+                </div>
+                );
+              })}
+              {!confirmedIdentifier && (
+                !selectedType ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 gap-1.5">
                       {IDENTIFIER_OPTIONS.map(opt => (
                         <button
                           key={opt.type}
                           onClick={() => selectType(opt)}
-                          disabled={!!selectedType}
-                          className="flex items-center gap-1.5 px-2.5 py-2 text-[11px] text-left transition-all disabled:opacity-40 disabled:cursor-default"
+                          className="flex items-center gap-1.5 px-2.5 py-2 text-[11px] text-left transition-all"
                           style={{
-                            background: selectedType?.type === opt.type ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.04)",
-                            border: selectedType?.type === opt.type ? "1px solid rgba(245,158,11,0.45)" : "1px solid rgba(255,255,255,0.08)",
-                            color: selectedType?.type === opt.type ? "#f59e0b" : "var(--muted-foreground)",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            color: "var(--muted-foreground)",
                             fontFamily: "var(--font-body)",
                           }}
-                          onMouseEnter={e => { if (!selectedType) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
-                          onMouseLeave={e => { if (!selectedType) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
                         >
-                          <span className={selectedType?.type === opt.type ? "text-amber-400" : "text-muted-foreground"}>{opt.icon}</span>
+                          <span className="text-muted-foreground">{opt.icon}</span>
                           {opt.label}
                         </button>
                       ))}
                     </div>
-                  )}
-                  {/* Value input inline */}
-                  {msg.role === "bot" && msg.kind === "value_input" && selectedType && (
-                    <div className="flex gap-2 mt-1 ml-7">
-                      <input
-                        ref={inputRef}
-                        value={valueInput}
-                        onChange={e => setValueInput(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && submitValue()}
-                        placeholder={selectedType.placeholder}
-                        className="flex-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none border border-border"
-                        style={{ background: "rgba(255,255,255,0.04)", fontFamily: "var(--font-body)" }}
-                      />
-                      <button
-                        onClick={submitValue}
-                        disabled={!valueInput.trim()}
-                        className="px-3 py-2 text-xs font-medium disabled:opacity-30 transition-colors"
-                        style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
-                      >
-                        <Zap size={13} />
-                      </button>
+                    <div className="pt-1">
+                      <div className="text-[10px] text-muted-foreground mb-1.5" style={{ fontFamily: "var(--font-data)" }}>
+                        Or you can...
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          onClick={runVoiceInput}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] text-left transition-all"
+                          style={{
+                            background: "rgba(245,158,11,0.08)",
+                            border: "1px solid rgba(245,158,11,0.18)",
+                            color: "var(--foreground)",
+                            fontFamily: "var(--font-body)",
+                          }}
+                        >
+                          <Mic size={12} className="text-amber-400" />
+                          Talk
+                        </button>
+                        <button
+                          onClick={runScreenshotCheck}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-[11px] text-left transition-all"
+                          style={{
+                            background: "rgba(245,158,11,0.08)",
+                            border: "1px solid rgba(245,158,11,0.18)",
+                            color: "var(--foreground)",
+                            fontFamily: "var(--font-body)",
+                          }}
+                        >
+                          <Camera size={12} className="text-amber-400" />
+                          Check what's on the screen
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      ref={identifierInputRef}
+                      value={valueInput}
+                      onChange={e => setValueInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && submitIdentifier()}
+                      placeholder={selectedType.placeholder}
+                      className="flex-1 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none border border-border"
+                      style={{ background: "rgba(255,255,255,0.04)", fontFamily: "var(--font-body)" }}
+                    />
+                    <button
+                      onClick={submitIdentifier}
+                      disabled={!valueInput.trim()}
+                      className="px-3 py-2 text-xs font-medium disabled:opacity-30 transition-colors"
+                      style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                    >
+                      <Zap size={13} />
+                    </button>
+                  </div>
+                )
+              )}
               <div ref={chatEndRef} />
             </div>
-            <div className="px-3 pb-3 border-t border-border pt-2.5 flex-shrink-0">
-              <p className="text-[9px] text-muted-foreground leading-relaxed" style={{ fontFamily: "var(--font-data)" }}>
-                Your submission is private by default. Raw data stays on the server — shared only after desensitization.
-              </p>
+            <div className="px-3 py-3 border-t border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <input
+                  value={promptInput}
+                  onChange={e => setPromptInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && runPrompt(promptInput)}
+                  placeholder="What do you want me to check?"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                  style={{ fontFamily: "var(--font-body)" }}
+                />
+                <button
+                  onClick={runVoiceInput}
+                  aria-label="Talk"
+                  title="Talk"
+                  className="p-1.5 text-muted-foreground hover:text-foreground border border-border hover:bg-white/5 transition-colors"
+                >
+                  <Mic size={12} />
+                </button>
+                <button
+                  onClick={runScreenshotCheck}
+                  aria-label="Check what's on the screen"
+                  title="Check what's on the screen"
+                  className="p-1.5 text-muted-foreground hover:text-foreground border border-border hover:bg-white/5 transition-colors"
+                >
+                  <Camera size={12} />
+                </button>
+                <button
+                  onClick={() => runPrompt(promptInput)}
+                  disabled={!promptInput.trim()}
+                  className="p-1.5 text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30"
+                >
+                  <Send size={13} />
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -2020,6 +2393,18 @@ function ExtensionView() {
             <div className="px-3 py-3 border-t border-border flex-shrink-0">
               {step !== "chat" ? (
                 <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setStep("report")}
+                      className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-white/5 transition-colors"
+                      style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                      <FileText size={12} /> REPORT
+                    </button>
+                    <button onClick={() => setStep("suspect")}
+                      className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-white/5 transition-colors"
+                      style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                      <User size={12} /> SUSPECT
+                    </button>
+                  </div>
                   <button onClick={openQa}
                     className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors"
                     style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
@@ -2062,6 +2447,194 @@ function ExtensionView() {
               </p>
             </div>
           </>
+        )}
+
+        {/* ── EXTENSION REPORT LIST ── */}
+        {step === "report" && (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ scrollbarWidth: "none" }}>
+            <div className="flex items-center justify-between">
+              <SectionHeader>Reports</SectionHeader>
+              <Monospace className="text-muted-foreground">{REPORTS.length} submitted</Monospace>
+            </div>
+            {REPORTS.map(item => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setSelectedExtensionReportId(item.id);
+                  setStep("reportDetail");
+                }}
+                className="w-full text-left p-3 border border-border hover:border-amber-500/30 hover:bg-white/5 transition-colors"
+                style={{ background: "rgba(255,255,255,0.025)" }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <Monospace className="text-foreground block">{item.id}</Monospace>
+                    <Monospace className="text-muted-foreground break-all block mt-1">{item.reportedIdentifier}</Monospace>
+                  </div>
+                  <RiskBadge level={item.risk} size="sm" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-muted-foreground">{item.type}</span>
+                  <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>{item.corroborationCount} matches</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── EXTENSION REPORT DETAIL ── */}
+        {step === "reportDetail" && (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollbarWidth: "none" }}>
+            <button
+              onClick={() => setStep("report")}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+            >
+              <ArrowLeft size={11} /> BACK TO REPORTS
+            </button>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <SectionHeader>Report</SectionHeader>
+                <Monospace className="text-foreground">{report.id}</Monospace>
+              </div>
+              <StatusPill status={report.status} />
+            </div>
+            <div className="p-3 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
+              <div className="text-[10px] text-muted-foreground mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>SUBMITTED IDENTIFIER</div>
+              <Monospace className="text-foreground break-all">{report.reportedIdentifier}</Monospace>
+            </div>
+            <div className="flex items-center gap-3 p-3 border border-red-500/20" style={{ background: "rgba(239,68,68,0.06)" }}>
+              <ScoreGauge score={report.score} risk={report.risk} size={58} />
+              <div>
+                <RiskBadge level={report.risk} />
+                <div className="text-[10px] text-muted-foreground mt-1.5" style={{ fontFamily: "var(--font-data)" }}>
+                  {report.corroborationCount} matched submissions<br />Last activity: {report.lastActivity}
+                </div>
+              </div>
+            </div>
+            <div>
+              <SectionHeader>Why It Was Accepted</SectionHeader>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                The agent accepted this report because it contains enough concrete material: a suspicious identifier, message context, payment request, and off-platform migration.
+              </p>
+            </div>
+            <div>
+              <SectionHeader>Risk Indicators</SectionHeader>
+              <div className="space-y-1.5">
+                {report.indicators.map(ind => (
+                  <div key={ind} className="flex items-start gap-2 text-[11px] text-foreground">
+                    <AlertTriangle size={10} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                    {ind}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── EXTENSION SUSPECT LIST ── */}
+        {step === "suspect" && (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ scrollbarWidth: "none" }}>
+            <div className="flex items-center justify-between">
+              <SectionHeader>Suspects</SectionHeader>
+              <Monospace className="text-muted-foreground">{REPORTS.length} tracked</Monospace>
+            </div>
+            {REPORTS.map(item => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setSelectedExtensionSuspectId(item.id);
+                  setStep("suspectDetail");
+                }}
+                className="w-full text-left p-3 border border-border hover:border-amber-500/30 hover:bg-white/5 transition-colors"
+                style={{ background: "rgba(255,255,255,0.025)" }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <Monospace className="text-foreground break-all block">{item.reportedIdentifier}</Monospace>
+                    <span className="text-[10px] text-muted-foreground">{IDENTIFIER_TYPE_LABEL[item.reportedIdentifierType]}</span>
+                  </div>
+                  <span className={`text-lg font-bold ${RISK_CONFIG[item.risk].text}`} style={{ fontFamily: "var(--font-display)" }}>{item.score}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <RiskBadge level={item.risk} size="sm" />
+                  <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>+{Math.max(item.corroborationCount - 1, 0)} other reports</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── EXTENSION SUSPECT DETAIL ── */}
+        {step === "suspectDetail" && (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollbarWidth: "none" }}>
+            <button
+              onClick={() => setStep("suspect")}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+            >
+              <ArrowLeft size={11} /> BACK TO SUSPECTS
+            </button>
+            <div>
+              <SectionHeader>Suspect</SectionHeader>
+              <Monospace className="text-foreground break-all">{suspect.reportedIdentifier}</Monospace>
+              <div className="text-[10px] text-muted-foreground mt-1">{IDENTIFIER_TYPE_LABEL[suspect.reportedIdentifierType]}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-3 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
+                <div className="text-xl font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>{suspect.corroborationCount}</div>
+                <div className="text-[10px] text-muted-foreground">matched reports</div>
+              </div>
+              <div className="p-3 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
+                <div className={`text-xl font-bold ${RISK_CONFIG[suspect.risk].text}`} style={{ fontFamily: "var(--font-display)" }}>{suspect.score}</div>
+                <div className="text-[10px] text-muted-foreground">risk score</div>
+              </div>
+            </div>
+            <div>
+              <SectionHeader>Connected Signals</SectionHeader>
+              <div className="space-y-2">
+                {[
+                  "Uses non-Meta recruiting domain",
+                  "Requests Zelle payment before onboarding",
+                  "Moves conversation to WhatsApp",
+                  "Shares message template with prior reports",
+                ].map(signal => (
+                  <div key={signal} className="px-3 py-2 border border-border text-[11px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.025)" }}>
+                    {signal}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <SectionHeader>Linked Sessions</SectionHeader>
+              <div className="space-y-2">
+                {linkedSuspectSessions.map(({ key, snapshot }) => (
+                  <button
+                    key={key}
+                    onClick={() => openLinkedSession(key)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 border border-border text-left hover:border-amber-500/30 hover:bg-white/5 transition-colors"
+                    style={{ background: "rgba(255,255,255,0.025)" }}
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      <div className="w-6 h-6 flex items-center justify-center text-amber-400 border border-amber-500/25 flex-shrink-0" style={{ background: "rgba(245,158,11,0.08)" }}>
+                        {IDENTIFIER_OPTIONS.find(opt => opt.label === snapshot.confirmedIdentifier?.label)?.icon ?? <User size={12} />}
+                      </div>
+                      <div className="min-w-0">
+                        <Monospace className="text-foreground break-all">{sessionDisplayName(snapshot)}</Monospace>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">Open this session</div>
+                      </div>
+                    </div>
+                    <ChevronRight size={12} className="text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+                {linkedSuspectSessions.length === 0 && (
+                  <div className="px-3 py-2 border border-border text-[11px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.025)" }}>
+                    No saved sessions are linked to this suspect yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
