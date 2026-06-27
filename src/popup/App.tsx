@@ -55,6 +55,7 @@ interface Alert {
   reportId: string;
   suspect: string;
   message: string;
+  read: boolean;
 }
 
 interface ChatMessage {
@@ -211,12 +212,12 @@ const REPORTS: Report[] = [
 ];
 
 const ALERTS: Alert[] = [
-  { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Payment request detected: Zelle ($2,400). Do not send funds." },
-  { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Wallet address collection detected. Do not share crypto credentials." },
-  { id: 3, time: "09:31", severity: "HIGH",     reportId: "SR-2024-0339", suspect: "github.com/devhire-solutions",          message: "Script execution request in submitted PR. Do not run code." },
-  { id: 4, time: "08:55", severity: "MEDIUM",   reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "14 corroborating reports matched this suspect. Pattern confidence: 94%." },
-  { id: 5, time: "08:12", severity: "MEDIUM",   reportId: "SR-2024-0335", suspect: "marketplace_seller_99",                 message: "Fake escrow pattern matches 6 prior reports for this suspect." },
-  { id: 6, time: "07:44", severity: "HIGH",     reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Associated wallet 0x7a3f…c82e flagged in 3 AML databases." },
+  { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: payment request detected in the submitted material. Zelle amount: $2,400. Do not send funds.", read: false },
+  { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: wallet address collection detected. Do not share crypto credentials.", read: false },
+  { id: 3, time: "09:31", severity: "HIGH",     reportId: "SR-2024-0339", suspect: "github.com/devhire-solutions",          message: "Server update: script execution request detected in submitted PR. Do not run code.", read: false },
+  { id: 4, time: "08:55", severity: "MEDIUM",   reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: 14 corroborating reports matched this suspect. Pattern confidence: 94%.", read: true },
+  { id: 5, time: "08:12", severity: "MEDIUM",   reportId: "SR-2024-0335", suspect: "marketplace_seller_99",                 message: "Server update: fake escrow pattern matches 6 prior reports for this suspect.", read: true },
+  { id: 6, time: "07:44", severity: "HIGH",     reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: associated wallet 0x7a3f…c82e flagged by external risk sources.", read: true },
 ];
 
 const INITIAL_CHAT: ChatMessage[] = [
@@ -471,15 +472,26 @@ function AlertFeed({ alerts, onReportClick }: { alerts: Alert[]; onReportClick: 
     HIGH:     { icon: <AlertTriangle size={12} />, color: "text-orange-400", border: "border-l-orange-500", bg: "hover:bg-orange-500/5" },
     MEDIUM:   { icon: <Activity size={12} />,      color: "text-amber-400",  border: "border-l-amber-500",  bg: "hover:bg-amber-500/5" },
   };
+  const unreadCount = alerts.filter(alert => !alert.read).length;
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <SectionHeader>Alert Feed</SectionHeader>
-          <LiveDot />
+        <div>
+          <div className="flex items-center gap-2">
+            <SectionHeader>Server Alert Feed</SectionHeader>
+            <LiveDot />
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5" style={{ fontFamily: "var(--font-data)" }}>
+            Updates pushed by ScamRadar server, not local-only state
+          </div>
         </div>
-        <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>{alerts.length} active</span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-1 border border-amber-500/25 text-[10px] text-amber-400 bg-amber-500/10" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+            {unreadCount} UNREAD
+          </span>
+          <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>{alerts.length} server updates</span>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto divide-y divide-border" style={{ scrollbarWidth: "none" }}>
         {alerts.map(alert => {
@@ -488,12 +500,17 @@ function AlertFeed({ alerts, onReportClick }: { alerts: Alert[]; onReportClick: 
             <button
               key={alert.id}
               onClick={() => onReportClick(alert.reportId)}
-              className={`w-full text-left px-3 py-2.5 border-l-2 ${cfg.border} ${cfg.bg} transition-colors`}
+              className={`w-full text-left px-3 py-2.5 border-l-2 ${alert.read ? "opacity-65" : ""} ${cfg.border} ${cfg.bg} transition-colors`}
+              style={{ background: alert.read ? "transparent" : "rgba(245,158,11,0.035)" }}
             >
               <div className="flex items-center justify-between mb-1">
                 <div className={`flex items-center gap-1.5 ${cfg.color}`}>
+                  {!alert.read && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
                   {cfg.icon}
                   <span className="text-[10px] font-semibold" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>{alert.severity}</span>
+                  <span className={`ml-1 px-1.5 py-0.5 border text-[9px] ${alert.read ? "border-border text-muted-foreground" : "border-amber-500/30 text-amber-400 bg-amber-500/10"}`} style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                    {alert.read ? "READ" : "UNREAD"}
+                  </span>
                 </div>
                 <Monospace className="text-muted-foreground">{alert.time}</Monospace>
               </div>
@@ -603,6 +620,11 @@ function DashboardView({ onSelectReport }: { onSelectReport: (id: string) => voi
   const acceptedCount = REPORTS.filter(c => c.status === "ACCEPTED").length;
   // corroboration counts come from the aggregate — we show counts, never other users' data
   const totalCorroborations = REPORTS.reduce((a, c) => a + c.corroborationCount, 0);
+  const recencyValue = (value: string) => {
+    if (value.includes("h ago")) return Number(value.replace("h ago", "")) || 0;
+    if (value.includes("d ago")) return (Number(value.replace("d ago", "")) || 0) * 24;
+    return 999;
+  };
 
   const stats = [
     { label: "My Reports",        value: REPORTS.length,        sub: "submissions you created",        color: "text-foreground",  icon: <Shield size={16} className="text-amber-400" /> },
@@ -610,6 +632,9 @@ function DashboardView({ onSelectReport }: { onSelectReport: (id: string) => voi
     { label: "Accepted",          value: acceptedCount,         sub: "accepted by agent",               color: "text-green-400",   icon: <CheckCircle size={16} className="text-green-400" /> },
     { label: "Corroborations",    value: totalCorroborations,   sub: "independent reports (count only)", color: "text-purple-400",  icon: <Users size={16} className="text-purple-400" /> },
   ];
+
+  const recentReports = [...REPORTS].sort((a, b) => recencyValue(a.lastActivity) - recencyValue(b.lastActivity)).slice(0, 3);
+  const recentSuspects = [...REPORTS].sort((a, b) => recencyValue(a.lastActivity) - recencyValue(b.lastActivity)).slice(0, 3);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -649,23 +674,75 @@ function DashboardView({ onSelectReport }: { onSelectReport: (id: string) => voi
         ))}
       </div>
 
-      {/* Privacy notice */}
-      <div className="flex items-center gap-3 px-5 py-2 border-b border-border flex-shrink-0" style={{ background: "rgba(99,102,241,0.06)" }}>
-        <ShieldCheck size={13} className="text-indigo-400 flex-shrink-0" />
-        <p className="text-[11px] text-indigo-300/70 leading-snug">
-          <strong className="text-indigo-300">Private by default.</strong> You manage your own reports and the suspects you submitted. Raw submissions are stored securely on the server and never shared directly. When other reporters have flagged the same suspect, their materials are desensitized before being shared with you — and yours with them.
-        </p>
-      </div>
-
-      {/* Content grid */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Alert feed */}
-        <div className="w-72 border-r border-border overflow-hidden flex-shrink-0">
+      {/* Dashboard body */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-6 py-5 gap-5">
+        <div className="flex-1 min-h-[180px] border border-border overflow-hidden" style={{ background: "var(--card)" }}>
           <AlertFeed alerts={ALERTS} onReportClick={onSelectReport} />
         </div>
-        {/* Reports table */}
-        <div className="flex-1 overflow-hidden">
-          <ReportsTable reports={REPORTS} onSelect={onSelectReport} />
+
+        <div className="space-y-5 flex-shrink-0">
+          <section className="min-w-0">
+            <div className="flex items-center justify-between mb-3">
+              <SectionHeader>Recent Reports</SectionHeader>
+              <Monospace className="text-muted-foreground">3 latest</Monospace>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {recentReports.map(report => (
+                <button
+                  key={report.id}
+                  type="button"
+                  onClick={() => onSelectReport(report.id)}
+                  className="min-h-[104px] text-left p-3 border border-border hover:bg-white/5 transition-colors"
+                  style={{ background: "var(--card)" }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <Monospace className="text-amber-400">{report.id}</Monospace>
+                    <RiskBadge level={report.risk} size="sm" />
+                  </div>
+                  <div className="text-xs text-foreground truncate" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.03em" }}>{report.type}</div>
+                  <Monospace className="text-muted-foreground mt-1 block truncate">{report.reportedIdentifier}</Monospace>
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    <StatusPill status={report.status} />
+                    <Monospace className="text-muted-foreground">{report.lastActivity}</Monospace>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="min-w-0">
+            <div className="flex items-center justify-between mb-3">
+              <SectionHeader>Recent Suspects</SectionHeader>
+              <Monospace className="text-muted-foreground">3 latest</Monospace>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {recentSuspects.map(suspect => (
+                <button
+                  key={suspect.id}
+                  type="button"
+                  onClick={() => onSelectReport(suspect.id)}
+                  className="min-h-[104px] text-left p-3 border border-border hover:bg-white/5 transition-colors"
+                  style={{ background: "var(--card)" }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                      {IDENTIFIER_TYPE_LABEL[suspect.reportedIdentifierType]}
+                    </span>
+                    <RiskBadge level={suspect.risk} size="sm" />
+                  </div>
+                  <Monospace className="text-foreground/80 block truncate">{suspect.reportedIdentifier}</Monospace>
+                  <div className="text-[11px] text-muted-foreground mt-2 line-clamp-2">{suspect.indicators.slice(0, 2).join(" · ")}</div>
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Users size={11} />
+                      <Monospace>{suspect.corroborationCount} reports</Monospace>
+                    </div>
+                    <Monospace className="text-muted-foreground">{suspect.lastActivity}</Monospace>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </div>
