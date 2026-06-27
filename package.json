@@ -1,0 +1,28 @@
+{
+  "name": "scamradar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "self-check": "tsx src/shared/analysis.test.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^0.487.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.1.12",
+    "vite": "^7.0.0",
+    "typescript": "^5.8.0",
+    "tsx": "^4.20.0",
+    "@types/chrome": "^0.0.326",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^24.0.0"
+  }
+}
