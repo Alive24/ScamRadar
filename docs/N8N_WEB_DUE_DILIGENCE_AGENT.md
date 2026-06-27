@@ -47,7 +47,9 @@ const HARDCODED_TAVILY_API_KEY = "";
 const HARDCODED_ATTIO_API_KEY = "";
 ```
 
-The code also accepts `body.tavily_api_key`, `body.attio_api_key`, `process.env.TAVILY_API_KEY`, and `process.env.ATTIO_API_KEY` as fallbacks.
+The code also accepts `body.tavily_api_key` and `body.attio_api_key` as fallbacks.
+
+Do not use `process.env`, `$env`, or `$vars` inside the current n8n Cloud Code node. The current n8n environment denies Code node env-var access and can fail the run with `access to env vars denied`.
 
 ## Trigger
 
@@ -73,9 +75,6 @@ Expected body:
 
 - Attio credential or API token with read/write access to suspect objects, reports, sources, evidence, risk indicators, and agent runs.
 - Tavily API key.
-- Environment variable names recommended for production n8n:
-  - `ATTIO_API_KEY`
-  - `TAVILY_API_KEY`
 - Current n8n Cloud plan notes:
   - n8n Variables may not be available on the current plan.
   - For the demo workflow, use the hardcoded constants in the Code node or pass keys in the webhook body.
