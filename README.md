@@ -2,30 +2,37 @@
 
 ScamRadar is an agentic trust-and-safety CRM for suspicious outreach triage. It lets a user submit conversations, emails, posts, profile links, domains, wallets, repositories, or notes, then returns immediate risk indicators, links reports to reusable suspect records, and prepares evidence-backed reviewer workflows.
 
-The hackathon demo includes a complete visual prototype with both a Chrome Extension-style user flow and an analyst Dashboard UI. It also includes a working n8n Web Due Diligence workflow connected to Attio and Tavily for a demo suspect record.
+The hackathon demo includes a complete visual prototype with both a Chrome Extension-style user flow and an analyst Dashboard UI. The visual prototype was created with Gemini AI Studio and then integrated into this repo. It also includes a working n8n Web Due Diligence workflow connected to Attio and Tavily for a demo suspect record.
 
-## Current Scope
+## What's been available to demo
 
-- Chrome Extension-style popup for paste-and-check triage.
-- Dashboard UI for reviewer queue, suspect records, linked reports, risk timeline, and case review.
-- Content script to pull selected text and current page context.
-- Local rules for immediate danger alerts.
-- Seeded similar reports for demo clustering.
-- In-app Q&A/chat surface over the current report and suspect context.
-- Mock async investigation status in the background worker.
-- Markdown report packet generation.
+- Chrome Extension-style UI and mock workflow for five different use cases.
+  - LinkedIn job message for report flow
+  - eBay fraud payment request for an immediate stop from model
+  - GitHub phishing repo for a stop from results of on-cloud agent runs.
+  - Fake news post of X for a stop from results of on-cloud agent runs.
+  - Gemini for a pass.
+- Dashboard UI for submitted reports, suspect records, and latest updates.
+- Data connection to Attio for reports and suspect records.
+- One of the designed agents on n8n for web due diligence connected with Attio and Tavily.
+- Real-time chat model connected with Superlinked.
+- A vector database available for documents through Superlinked.
+- A pitch deck for the product.
+- A PRD for the product.
+- A loom video.
 
 ## Partner Technologies
 
-The submission uses at least three partner technologies:
+The submission uses at least four partner technologies:
 
-| Partner technology | Current demo usage |
-| --- | --- |
-| Attio | CRM/data availability layer. Stores the current mock suspect as a `people` record with ScamRadar fields and receives n8n write-back into `agent_findings`, `risk_level`, and `confidence`. |
-| n8n | Subagent orchestration. Hosts `ScamRadar - Web Due Diligence Agent` with webhook and manual mock trigger paths. |
-| Tavily | Web due diligence search. The n8n agent builds privacy-safe queries, calls Tavily Search, dedupes source URLs, and writes summarized evidence back to Attio. |
+| Partner technology | Current demo usage                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Attio              | CRM/data availability layer. Stores the current mock suspect as a `people` record with ScamRadar fields and receives n8n write-back into `agent_findings`, `risk_level`, and `confidence`. |
+| n8n                | Subagent orchestration. Hosts `ScamRadar - Web Due Diligence Agent` with webhook and manual mock trigger paths.                                                                            |
+| Tavily             | Web due diligence search. The n8n agent builds privacy-safe queries, calls Tavily Search, dedupes source URLs, and writes summarized evidence back to Attio.                               |
+| Superlinked        | Vectorized similarity and retrieval layer for comparing submitted reports, suspect context, and document embeddings used by the chat/model experience.                                      |
 
-Additional integration boundaries are documented for Superlinked/vector similarity, Aikido/code-risk checks, and SLNG/voice intake. The visual prototype also shows a fast chat-model Q&A surface and vectorized similarity matching using seeded demo data.
+Additional integration boundaries are documented for Aikido/code-risk checks and SLNG/voice intake. The visual prototype also shows a fast chat-model Q&A surface and vectorized similarity matching.
 
 ## Current n8n/Attio Demo
 

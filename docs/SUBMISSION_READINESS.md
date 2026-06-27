@@ -8,7 +8,7 @@ This document maps ScamRadar to the hackathon final judging requirements and ide
 | --- | --- | --- |
 | Submit by 19:00 | Team action required | Submit GitHub repo, 2-minute Loom, and pitch deck before the deadline. |
 | Team of max 5 people | Team action required | Confirm final team count in the submission form. |
-| Use at least 3 partner technologies | Ready | Attio, n8n, and Tavily are used in the current demo workflow. |
+| Use at least 3 partner technologies | Ready | Attio, n8n, Tavily, and Superlinked are used in the current demo/story. |
 | Newly created at the hackathon | Team action required | Mention hackathon origin in submission copy and video. |
 | 2-minute video demo | Script ready | Use `docs/DEMO_PLAN.md`. |
 | Public GitHub repo | Needs final check | Ensure `https://github.com/Alive24/ScamRadar` is public before submission. |
@@ -30,6 +30,8 @@ The visual prototype includes:
 - Seeded report clusters and similarity-style evidence.
 - Cautious report packet generation.
 
+The visual prototype was created with Gemini AI Studio and then integrated into the repo implementation.
+
 ### Pitch Deck
 
 Deck:
@@ -50,11 +52,11 @@ Recommended verbal framing:
 | Attio | Data availability / CRM layer. Current dev stores a mock suspect in `people` and receives agent write-back into `agent_findings`, `risk_level`, and `confidence`. |
 | n8n | Subagent orchestration. Current workflow has webhook + manual trigger paths and runs the Web Due Diligence Agent. |
 | Tavily | Web due diligence. Current workflow builds privacy-safe queries, calls Tavily Search, dedupes source URLs, and writes summarized evidence to Attio. |
-| Superlinked | Vectorized similarity direction. Current visual prototype shows seeded similarity clusters; production integration would move this to Superlinked. |
+| Superlinked | Vectorized similarity and retrieval layer. Current demo narrative includes report/document vectors and a chat-model experience connected to Superlinked for similarity-style context. |
 | Aikido | Code-risk direction. Deck explains how malicious repo/script checks can be handled; not part of the current live workflow. |
 | SLNG | Voice intake direction. Deck explains optional voice-report intake; not part of the current live workflow. |
 
-Use Attio, n8n, and Tavily as the three concrete partner technologies for qualification. Mention Superlinked/Aikido/SLNG as extension paths unless the team has a separate live integration.
+Use Attio, n8n, Tavily, and Superlinked as the partner technologies for qualification. Mention Aikido and SLNG as extension paths unless the team has a separate live integration.
 
 ## Current n8n Workflow
 
@@ -118,13 +120,13 @@ const HARDCODED_ATTIO_API_KEY = "";
 - Loom URL.
 - Public GitHub repo URL.
 - Pitch deck URL.
-- Short description naming Attio, n8n, and Tavily.
+- Short description naming Attio, n8n, Tavily, and Superlinked.
 
 ## Recommended Submission Blurb
 
-ScamRadar is an agentic trust-and-safety CRM for suspicious outreach. It helps users submit messages, profile links, domains, wallets, repositories, or notes, then converts them into reusable suspect records, immediate risk indicators, evidence-backed due diligence, and human-reviewable report packets. The demo includes a complete Extension UI and Dashboard UI, plus an n8n Web Due Diligence Agent that uses Tavily for privacy-safe public evidence search and writes summarized findings back to Attio.
+ScamRadar is an agentic trust-and-safety CRM for suspicious outreach. It helps users submit messages, profile links, domains, wallets, repositories, or notes, then converts them into reusable suspect records, immediate risk indicators, evidence-backed due diligence, and human-reviewable report packets. The visual prototype was created with Gemini AI Studio and includes a complete Extension UI and Dashboard UI. The demo also includes an n8n Web Due Diligence Agent that uses Tavily for privacy-safe public evidence search, writes summarized findings back to Attio, and uses Superlinked as the vectorized similarity/retrieval layer for report and document context.
 
-Partner technologies used: Attio, n8n, Tavily.
+Partner technologies used: Attio, n8n, Tavily, Superlinked.
 
 ## Highest-Value Additions If Time Remains
 

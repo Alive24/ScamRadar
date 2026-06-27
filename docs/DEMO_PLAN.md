@@ -53,6 +53,7 @@ Show the integration story clearly:
 - **Attio** is the CRM/data availability layer. In the current dev workspace, the mock suspect is an Attio `people` record with ScamRadar fields.
 - **n8n** orchestrates subagents. The implemented workflow is `ScamRadar - Web Due Diligence Agent`.
 - **Tavily** performs privacy-safe web due diligence. It searches public identifiers and safe phrase fingerprints, dedupes URLs, and produces source-backed evidence summaries.
+- **Superlinked** powers the vectorized similarity/retrieval layer for report and document context used by the chat/model experience.
 
 Show n8n briefly:
 
