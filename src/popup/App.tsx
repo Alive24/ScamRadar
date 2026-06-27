@@ -96,6 +96,32 @@ const IDENTIFIER_TYPE_LABEL: Record<Report["reportedIdentifierType"], string> = 
 
 const REPORTS: Report[] = [
   {
+    id: "SR-2024-0352",
+    reportedIdentifier:     "linkedin.com/in/jordan-lee-recruiting",
+    reportedIdentifierType: "linkedin_url",
+    corroborationCount:     1,
+    type: "Recruiter Check",
+    platform: "LinkedIn",
+    risk: "YELLOW",
+    score: 38,
+    status: "ACCEPTED",
+    lastActivity: "Just now",
+    indicators: ["Vague company context", "Unverified recruiter affiliation", "No payment request", "Agent due diligence queued"],
+    summary: "Recruiter outreach is not enough to classify as high-risk. The message is plausible but light on company details, so the report was accepted for agent-side verification and aggregation.",
+    subagentsActive: true,
+    communitySubmissions: [
+      {
+        isMine: true,
+        platform: "LinkedIn",
+        materialType: "Conversation log",
+        myRaw: "A recruiter named Jordan Lee reached out about a founding engineer role at a stealth AI startup. The message asked for my CV and availability for a quick call, but did not include a company website, official email, or job posting link.",
+        desensitized: "Recruiter on [PLATFORM] reached out about a [ROLE] at a [COMPANY_STAGE] startup. Asked for CV and availability. No payment, credentials, or identity documents requested, but company identity is not yet verified.",
+        indicators: ["Vague company details", "Affiliation unverified"],
+        submittedAt: "Just now",
+      },
+    ],
+  },
+  {
     id: "SR-2024-0347",
     reportedIdentifier:     "linkedin.com/in/alex-morgan-recruiter",
     reportedIdentifierType: "linkedin_url",
@@ -166,17 +192,17 @@ const REPORTS: Report[] = [
   },
   {
     id: "SR-2024-0339",
-    reportedIdentifier:     "github.com/devhire-solutions",
+    reportedIdentifier:     "github.com/northstar-labs/frontend-takehome",
     reportedIdentifierType: "github_url",
-    corroborationCount:     3,
-    type: "Malicious Script",
+    corroborationCount:     4,
+    type: "Malicious Code",
     platform: "GitHub",
-    risk: "ORANGE",
-    score: 64,
-    status: "TRIAGING",
+    risk: "RED",
+    score: 93,
+    status: "ACCEPTED",
     lastActivity: "1d ago",
-    indicators: ["Account created 2 days ago", "Suspicious install script", "Remote payload execution"],
-    summary: "GitHub account created 2 days ago. Submitted PR with install.sh that fetches and executes a remote payload from an unregistered domain.",
+    indicators: ["Malicious postinstall script", "Environment variable exfiltration", "Remote payload download", "Cloud static analysis confirmed"],
+    summary: "Cloud code-analysis agents found a malicious npm lifecycle script that attempts to collect environment variables and contact an external endpoint during install. Users should not run install or scripts from this repository.",
     subagentsActive: false,
   },
   {
@@ -214,7 +240,7 @@ const REPORTS: Report[] = [
 const ALERTS: Alert[] = [
   { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: payment request detected in the submitted material. Zelle amount: $2,400. Do not send funds.", read: false },
   { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: wallet address collection detected. Do not share crypto credentials.", read: false },
-  { id: 3, time: "09:31", severity: "HIGH",     reportId: "SR-2024-0339", suspect: "github.com/devhire-solutions",          message: "Server update: script execution request detected in submitted PR. Do not run code.", read: false },
+  { id: 3, time: "09:31", severity: "CRITICAL", reportId: "SR-2024-0339", suspect: "github.com/northstar-labs/frontend-takehome", message: "Cloud code agent found a malicious postinstall script. Do not run npm install or repo scripts.", read: false },
   { id: 4, time: "08:55", severity: "MEDIUM",   reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: 14 corroborating reports matched this suspect. Pattern confidence: 94%.", read: true },
   { id: 5, time: "08:12", severity: "MEDIUM",   reportId: "SR-2024-0335", suspect: "marketplace_seller_99",                 message: "Server update: fake escrow pattern matches 6 prior reports for this suspect.", read: true },
   { id: 6, time: "07:44", severity: "HIGH",     reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: associated wallet 0x7a3f…c82e flagged by external risk sources.", read: true },
@@ -1641,7 +1667,9 @@ function SuspectsView({ onSelectSuspect }: { onSelectSuspect: (id: string) => vo
 // ─── Extension View ───────────────────────────────────────────────────────────
 
 type ExtStep = "home" | "scanning" | "alert" | "summary" | "chat" | "report" | "reportDetail" | "suspect" | "suspectDetail";
-type BotMsgKind = "text" | "confirm" | "warning";
+type BotMsgKind = "text" | "confirm" | "warning" | "safe" | "caution" | "report";
+type DemoWorkflowId = "linkedin" | "ebay" | "github" | "gemini";
+type PageVerdict = "suspect" | "trusted" | "caution" | null;
 
 interface BotMessage {
   role: "bot" | "user";
@@ -1680,6 +1708,138 @@ const SAFE_STEPS = [
   "Report to LinkedIn Trust & Safety",
 ];
 
+const DEMO_WORKFLOWS: Record<DemoWorkflowId, {
+  label: string;
+  shortLabel: string;
+  url: string;
+  identifierLabel: string;
+  identifierValue: string;
+  reportId: string;
+  suspectId: string;
+  risk: RiskLevel;
+  score: number;
+  confidence: string;
+  status: "suspect" | "trusted" | "caution";
+  confirmCopy: string;
+  resultCopy: string;
+  reportCopy: string;
+  indicators: { label: string; sev: "HIGH" | "MED" | "LOW" }[];
+  recommendations: string[];
+}> = {
+  linkedin: {
+    label: "LinkedIn job message",
+    shortLabel: "LinkedIn",
+    url: "linkedin.com/in/jordan-lee-recruiting",
+    identifierLabel: "LinkedIn Profile",
+    identifierValue: "linkedin.com/in/jordan-lee-recruiting",
+    reportId: "SR-2024-0352",
+    suspectId: "SR-2024-0352",
+    risk: "YELLOW",
+    score: 38,
+    confidence: "52%",
+    status: "caution",
+    confirmCopy: "Captured the LinkedIn profile and recent message. I’m checking whether the outreach contains enough context, official affiliation, and safe next steps.",
+    resultCopy: "This looks plausible, but there is not enough verified context yet. No payment, credential, code-execution, or identity-document request is visible. Submit a report if you want the agent to run background due diligence and watch for matching submissions.",
+    reportCopy: "Report SR-2024-0352 accepted. I attached the profile URL, message excerpt, claimed role, missing company details, and your note that the outreach felt vague.",
+    indicators: [
+      { label: "Professional outreach appears plausible", sev: "LOW" },
+      { label: "Company identity is not yet verified", sev: "MED" },
+      { label: "No payment or credential request visible", sev: "LOW" },
+      { label: "Agent due diligence can monitor for matches", sev: "MED" },
+    ],
+    recommendations: [
+      "Ask for company details through an official channel",
+      "Submit a report for agent follow-up",
+      "Do not share sensitive documents until the opportunity is verified",
+      "Preserve the message thread and profile URL",
+    ],
+  },
+  ebay: {
+    label: "eBay off-platform payment",
+    shortLabel: "eBay",
+    url: "ebay.com/itm/385911024991",
+    identifierLabel: "eBay Shop / Item",
+    identifierValue: "marketplace_seller_99",
+    reportId: "SR-2024-0335",
+    suspectId: "SR-2024-0335",
+    risk: "RED",
+    score: 92,
+    confidence: "94%",
+    status: "suspect",
+    confirmCopy: "Captured the eBay item, seller message, external checkout URL, and payment instructions. I’m checking buyer-protection bypass and known marketplace fraud patterns.",
+    resultCopy: "Immediate STOP: the seller is asking you to leave eBay buyer protection and pay through a fake escrow/payment path. This is a direct financial-loss risk.",
+    reportCopy: "Report SR-2024-0335 accepted. I attached the eBay item, seller handle, fake escrow URL, and off-platform payment request.",
+    indicators: [
+      { label: "Payment requested outside eBay", sev: "HIGH" },
+      { label: "Fake escrow/payment page linked", sev: "HIGH" },
+      { label: "Buyer protection bypassed", sev: "HIGH" },
+      { label: "Urgent shipping pressure", sev: "MED" },
+    ],
+    recommendations: [
+      "Do not pay outside eBay checkout",
+      "Do not open or enter details on the escrow link",
+      "Keep the conversation inside eBay",
+      "Submit a report with the item URL and seller handle",
+    ],
+  },
+  github: {
+    label: "GitHub repo request",
+    shortLabel: "GitHub",
+    url: "github.com/northstar-labs/frontend-takehome",
+    identifierLabel: "GitHub Profile",
+    identifierValue: "github.com/northstar-labs/frontend-takehome",
+    reportId: "SR-2024-0339",
+    suspectId: "SR-2024-0339",
+    risk: "RED",
+    score: 93,
+    confidence: "91%",
+    status: "suspect",
+    confirmCopy: "Captured the GitHub repository and visible setup instructions. I’m checking the saved cloud-agent analysis for package scripts, dependency behavior, and code-risk findings.",
+    resultCopy: "STOP: cloud code-analysis agents found malicious behavior in this repository. The package install path includes a postinstall script that attempts to collect environment variables and contact an external endpoint. Do not run npm install, npm scripts, or cloned code from this repo.",
+    reportCopy: "Report SR-2024-0339 accepted. I attached the repo URL, README excerpt, package script finding, suspicious file path, and cloud static-analysis evidence.",
+    indicators: [
+      { label: "Cloud agent found malicious postinstall behavior", sev: "HIGH" },
+      { label: "Environment variable collection detected", sev: "HIGH" },
+      { label: "External endpoint contacted during install", sev: "HIGH" },
+      { label: "Install script runs before user code review", sev: "HIGH" },
+    ],
+    recommendations: [
+      "Do not run npm install or any repo scripts",
+      "Do not clone it into a machine with credentials",
+      "Preserve the repo URL and cloud-agent findings",
+      "Submit a report so the agent can aggregate related attempts",
+    ],
+  },
+  gemini: {
+    label: "Gemini payment page",
+    shortLabel: "Gemini",
+    url: "payments.google.com/gp/w/u/0/buyflow?merchant=Google-Gemini",
+    identifierLabel: "Domain / URL",
+    identifierValue: "payments.google.com",
+    reportId: "SR-TRUSTED-001",
+    suspectId: "SR-2024-0347",
+    risk: "GREEN",
+    score: 8,
+    confidence: "96%",
+    status: "trusted",
+    confirmCopy: "Captured the payment URL, visible merchant name, HTTPS context, and Google account payment frame. I’m checking domain ownership and impersonation signals.",
+    resultCopy: "This page appears consistent with a trusted Google Payments checkout for Gemini. No immediate scam indicators were found in the visible page context.",
+    reportCopy: "No report was submitted. The page is currently assessed as trusted, with no high-risk indicators in the visible context.",
+    indicators: [
+      { label: "Domain matches Google Payments", sev: "LOW" },
+      { label: "HTTPS payment frame present", sev: "LOW" },
+      { label: "Merchant shown as Google Gemini", sev: "LOW" },
+      { label: "No off-platform payment request found", sev: "LOW" },
+    ],
+    recommendations: [
+      "Continue only while the domain remains payments.google.com",
+      "Do not approve unexpected popups or browser extensions",
+      "Check the plan price and signed-in account before paying",
+      "No report needed unless the URL or merchant changes",
+    ],
+  },
+};
+
 type ExtensionSessionKey = "current" | "previous";
 
 interface ExtensionSessionSnapshot {
@@ -1689,6 +1849,8 @@ interface ExtensionSessionSnapshot {
   valueInput: string;
   promptInput: string;
   createdAt: string;
+  activeWorkflow: DemoWorkflowId;
+  pageVerdict: PageVerdict;
 }
 
 function formatSessionTime(date = new Date()) {
@@ -1703,6 +1865,8 @@ function createEmptyExtensionSession(): ExtensionSessionSnapshot {
     valueInput: "",
     promptInput: "",
     createdAt: formatSessionTime(),
+    activeWorkflow: "linkedin",
+    pageVerdict: null,
   };
 }
 
@@ -1721,6 +1885,8 @@ const PREVIOUS_EXTENSION_SESSION: ExtensionSessionSnapshot = {
   valueInput: "",
   promptInput: "",
   createdAt: "09:44",
+  activeWorkflow: "linkedin",
+  pageVerdict: "suspect",
 };
 
 function sessionDisplayName(snapshot: ExtensionSessionSnapshot) {
@@ -1736,6 +1902,8 @@ function ExtensionView() {
   const [selectedType, setSelectedType] = useState<typeof IDENTIFIER_OPTIONS[number] | null>(null);
   const [confirmedIdentifier, setConfirmedIdentifier] = useState<{ label: string; value: string } | null>(null);
   const [activeSession, setActiveSession] = useState<ExtensionSessionKey>("current");
+  const [activeWorkflow, setActiveWorkflow] = useState<DemoWorkflowId>("linkedin");
+  const [pageVerdict, setPageVerdict] = useState<PageVerdict>(null);
   const [valueInput, setValueInput] = useState("");
   const [promptInput, setPromptInput] = useState("");
   const [qaMessages, setQaMessages] = useState<ChatMessage[]>([]);
@@ -1752,12 +1920,13 @@ function ExtensionView() {
   }, [botMessages, qaMessages]);
 
   function appendInlineInvestigationResult() {
+    const analysis = DEMO_WORKFLOWS[activeWorkflow];
     setBotMessages(prev => [
       ...prev,
       {
         role: "bot",
-        kind: "warning",
-        content: "High-risk indicators are present: the material includes an upfront payment/equipment request, an off-platform redirect, and similar prior reports. Pause before taking the requested action.",
+        kind: analysis.status === "trusted" ? "safe" : analysis.status === "caution" ? "caution" : "warning",
+        content: analysis.resultCopy,
       },
     ]);
   }
@@ -1770,6 +1939,8 @@ function ExtensionView() {
       valueInput,
       promptInput,
       createdAt: sessionSnapshotsRef.current[activeSession].createdAt,
+      activeWorkflow,
+      pageVerdict,
     };
   }
 
@@ -1779,39 +1950,86 @@ function ExtensionView() {
     setConfirmedIdentifier(snapshot.confirmedIdentifier);
     setValueInput(snapshot.valueInput);
     setPromptInput(snapshot.promptInput);
+    setActiveWorkflow(snapshot.activeWorkflow);
+    setPageVerdict(snapshot.pageVerdict);
     setQaMessages([]);
   }
 
-  function matchCurrentPageSuspect() {
-    setSelectedExtensionSuspectId(REPORTS[0].id);
-    setConfirmedIdentifier({ label: "LinkedIn Profile", value: "linkedin.com/in/alex-morgan-recruiter" });
+  function applyCurrentWorkflowMatch(workflowId = activeWorkflow) {
+    const analysis = DEMO_WORKFLOWS[workflowId];
+    setSelectedExtensionReportId(analysis.reportId);
+    setSelectedExtensionSuspectId(analysis.suspectId);
+    setConfirmedIdentifier({ label: analysis.identifierLabel, value: analysis.identifierValue });
+    setPageVerdict(analysis.status === "trusted" ? "trusted" : analysis.status === "caution" ? "caution" : "suspect");
+  }
+
+  function selectWorkflow(workflowId: DemoWorkflowId) {
+    const analysis = DEMO_WORKFLOWS[workflowId];
+    setActiveWorkflow(workflowId);
+    setPageVerdict(null);
+    setConfirmedIdentifier(null);
+    setSelectedType(null);
+    setValueInput("");
+    setPromptInput("");
+    setSelectedExtensionReportId(analysis.reportId);
+    setSelectedExtensionSuspectId(analysis.suspectId);
+    setStep("home");
+    setBotMessages([
+      ...GREETING,
+      {
+        role: "bot",
+        kind: "text",
+        content: `Demo loaded: ${analysis.label}. Use screen check or tell me what feels suspicious.`,
+      },
+    ]);
   }
 
   function runPrompt(value: string) {
     const val = value.trim();
     if (!val) return;
+    const analysis = DEMO_WORKFLOWS[activeWorkflow];
+    applyCurrentWorkflowMatch(activeWorkflow);
     setBotMessages(prev => [
       ...prev,
       { role: "user", kind: "text", content: val },
-      { role: "bot",  kind: "confirm", content: "Got it. I’m checking the current page context, extracted identifiers, risky asks, and similar reports." },
+      { role: "bot",  kind: "confirm", content: analysis.confirmCopy },
     ]);
     setPromptInput("");
     setTimeout(appendInlineInvestigationResult, 650);
   }
 
   function runScreenshotCheck() {
-    matchCurrentPageSuspect();
+    const analysis = DEMO_WORKFLOWS[activeWorkflow];
+    applyCurrentWorkflowMatch(activeWorkflow);
     setBotMessages(prev => [
       ...prev,
       { role: "user", kind: "text", content: "Check what's on the screen" },
       {
         role: "bot",
         kind: "confirm",
-        content: "Captured the visible page and reading profile text, message content, URL, and visible DOM signals before checking risky asks and similar reports.",
+        content: analysis.confirmCopy,
       },
     ]);
     setPromptInput("");
     setTimeout(appendInlineInvestigationResult, 650);
+  }
+
+  function submitCurrentWorkflowReport() {
+    const analysis = DEMO_WORKFLOWS[activeWorkflow];
+    applyCurrentWorkflowMatch(activeWorkflow);
+    setBotMessages(prev => [
+      ...prev,
+      {
+        role: "user",
+        kind: "text",
+        content: analysis.status === "trusted" ? "Submit report" : "Submit this report",
+      },
+      {
+        role: "bot",
+        kind: "report",
+        content: analysis.reportCopy,
+      },
+    ]);
   }
 
   function runVoiceInput() {
@@ -1911,6 +2129,8 @@ function ExtensionView() {
   const suspect = REPORTS.find(item => item.id === selectedExtensionSuspectId) ?? REPORTS[0];
   const isResultStep = step === "alert" || step === "summary" || step === "chat";
   const activePanel = step === "reportDetail" ? "report" : step === "suspectDetail" ? "suspect" : step;
+  const workflow = DEMO_WORKFLOWS[activeWorkflow];
+  const workflowSignal = pageVerdict ?? (isResultStep ? "suspect" : null);
   const confirmedIdentifierIcon = confirmedIdentifier
     ? IDENTIFIER_OPTIONS.find(opt => opt.label === confirmedIdentifier.label)?.icon ?? <User size={12} />
     : null;
@@ -1934,43 +2154,169 @@ function ExtensionView() {
           <div className="flex-1 mx-4 flex items-center gap-2 px-3 py-1 rounded-sm" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <Globe size={11} className="text-muted-foreground flex-shrink-0" />
             <span className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>
-              linkedin.com/in/alex-morgan-recruiter
+              {workflow.url}
             </span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-7 h-7 flex items-center justify-center rounded-sm relative"
-              style={{ background: isResultStep ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.12)", border: isResultStep ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(245,158,11,0.3)" }}>
-              <Radio size={13} className={isResultStep ? "text-red-400" : "text-amber-400"} />
-              {isResultStep && (
+              style={{
+                background: workflowSignal === "trusted" ? "rgba(34,197,94,0.14)" : workflowSignal === "suspect" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.12)",
+                border: workflowSignal === "trusted" ? "1px solid rgba(34,197,94,0.35)" : workflowSignal === "suspect" ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(245,158,11,0.3)",
+              }}>
+              <Radio size={13} className={workflowSignal === "trusted" ? "text-green-400" : workflowSignal === "suspect" ? "text-red-400" : "text-amber-400"} />
+              {workflowSignal === "suspect" && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
                   <span className="text-[7px] font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>!</span>
+                </span>
+              )}
+              {workflowSignal === "caution" && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full flex items-center justify-center">
+                  <span className="text-[7px] font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>?</span>
+                </span>
+              )}
+              {workflowSignal === "trusted" && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
+                  <CheckCircle size={8} className="text-white" />
                 </span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Fake LinkedIn page */}
-        <div className="p-8 max-w-2xl mx-auto mt-4">
-          <div className="p-5 rounded-lg mb-4" style={{ background: "#1e2435", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-16 h-16 rounded-full bg-blue-600/30 flex items-center justify-center flex-shrink-0 border-2 border-blue-500/20">
-                <User size={28} className="text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <div className="text-base font-semibold text-white/90 mb-0.5" style={{ fontFamily: "var(--font-body)" }}>Alex Morgan</div>
-                <div className="text-sm text-white/50 mb-1">Senior Technical Recruiter at Meta</div>
-                <div className="text-xs text-white/35" style={{ fontFamily: "var(--font-data)" }}>San Francisco Bay Area · 312 connections</div>
-              </div>
-              <button className="px-4 py-1.5 rounded-full text-xs font-medium" style={{ background: "#0a66c2", color: "#fff" }}>Connect</button>
-            </div>
-            <div className="border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="text-xs text-white/40 mb-2">Recent message:</div>
-              <div className="text-sm text-white/70 leading-relaxed p-3 rounded" style={{ background: "rgba(255,255,255,0.04)" }}>
-                "Hi! I came across your profile and think you'd be a great fit for a remote senior engineer role at Meta. The compensation is $8,000/week. To get started with onboarding, we'll need you to purchase your equipment upfront ($2,400 via Zelle) and we'll reimburse on your first paycheck. Let's move to WhatsApp to discuss further: +1 (415) 555-0182"
-              </div>
-            </div>
+        <div className="px-8 pt-5 max-w-2xl mx-auto">
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {(Object.keys(DEMO_WORKFLOWS) as DemoWorkflowId[]).map(id => {
+              const item = DEMO_WORKFLOWS[id];
+              return (
+                <button
+                  key={id}
+                  onClick={() => selectWorkflow(id)}
+                  className={`px-3 py-2 text-left border transition-colors ${activeWorkflow === id ? "border-amber-500/45 text-amber-300" : "border-white/10 text-white/45 hover:text-white/80 hover:bg-white/5"}`}
+                  style={{ background: activeWorkflow === id ? "rgba(245,158,11,0.09)" : "rgba(255,255,255,0.03)" }}
+                >
+                  <div className="text-[10px] font-semibold" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>{item.shortLabel}</div>
+                  <div className="text-[9px] mt-0.5 text-white/35" style={{ fontFamily: "var(--font-data)" }}>
+                    {id === "linkedin" ? "REPORT FLOW" : item.status === "trusted" ? "TRUSTED FLOW" : item.status === "caution" ? "CAUTION FLOW" : "STOP FLOW"}
+                  </div>
+                </button>
+              );
+            })}
           </div>
+
+          {activeWorkflow === "linkedin" && (
+            <div className="p-5 rounded-lg mb-4" style={{ background: "#1e2435", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-16 h-16 rounded-full bg-blue-600/30 flex items-center justify-center flex-shrink-0 border-2 border-blue-500/20">
+                  <User size={28} className="text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-base font-semibold text-white/90 mb-0.5" style={{ fontFamily: "var(--font-body)" }}>Jordan Lee</div>
+                  <div className="text-sm text-white/50 mb-1">Talent Partner · Early-stage AI hiring</div>
+                  <div className="text-xs text-white/35" style={{ fontFamily: "var(--font-data)" }}>London Area · 683 connections</div>
+                </div>
+                <button className="px-4 py-1.5 rounded-full text-xs font-medium" style={{ background: "#0a66c2", color: "#fff" }}>Connect</button>
+              </div>
+              <div className="border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="text-xs text-white/40 mb-2">Recent message:</div>
+                <div className="text-sm text-white/70 leading-relaxed p-3 rounded" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  "Hi, I’m helping an early-stage AI team hire founding engineers. Your background looks relevant. Would you be open to a 15-minute intro this week? I can share more company details after we confirm fit."
+                </div>
+                <button
+                  onClick={() => runPrompt("This feels suspicious. Should I submit a report?")}
+                  className="mt-3 px-3 py-2 text-xs text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                  style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                >
+                  This feels suspicious
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeWorkflow === "ebay" && (
+            <div className="rounded-lg overflow-hidden mb-4" style={{ background: "#f7f7f7", color: "#111827", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="px-5 py-3 flex items-center justify-between" style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb" }}>
+                <div className="text-xl font-bold" style={{ color: "#e53238", fontFamily: "Arial, sans-serif" }}>e<span style={{ color: "#0064d2" }}>B</span><span style={{ color: "#f5af02" }}>a</span><span style={{ color: "#86b817" }}>y</span></div>
+                <div className="text-xs text-gray-500">Item #385911024991</div>
+              </div>
+              <div className="p-5 grid grid-cols-[150px_1fr] gap-4">
+                <div className="h-36 rounded bg-gray-200 flex items-center justify-center">
+                  <Package size={44} className="text-gray-500" />
+                </div>
+                <div>
+                  <div className="text-base font-semibold">Sony A7 IV Camera Body - Like New</div>
+                  <div className="text-sm text-gray-500 mt-1">Seller: marketplace_seller_99 · 98.1% positive</div>
+                  <div className="text-2xl font-semibold mt-3">$1,250.00</div>
+                  <div className="mt-3 p-3 rounded border border-red-200 bg-red-50 text-sm leading-relaxed text-red-900">
+                    Seller message: "I can ship today, but eBay fees are too high. Pay through escrow-safe-pay.com or Zelle and I’ll mark it shipped immediately. Offer expires in 30 minutes."
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeWorkflow === "github" && (
+            <div className="rounded-lg overflow-hidden mb-4" style={{ background: "#0d1117", color: "#c9d1d9", border: "1px solid rgba(255,255,255,0.09)" }}>
+              <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid #30363d" }}>
+                <div className="flex items-center gap-2">
+                  <GitBranch size={16} className="text-white/70" />
+                  <div>
+                    <div className="text-sm font-semibold">northstar-labs / frontend-takehome</div>
+                    <div className="text-xs text-white/35">Public repository · maintained · 312 stars</div>
+                  </div>
+                </div>
+                <div className="px-2 py-1 rounded-full text-xs" style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}>Agent flagged</div>
+              </div>
+              <div className="p-5">
+                <div className="text-xs text-white/45 mb-2" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>README.md</div>
+                <div className="rounded border p-4 space-y-3" style={{ borderColor: "#30363d", background: "#161b22" }}>
+                  <div className="text-base font-semibold text-white/90">Frontend engineer take-home</div>
+                  <p className="text-sm leading-relaxed text-white/65">
+                    Clone the repo, install dependencies, run tests, and open a pull request with your solution. No secrets or production credentials are required.
+                  </p>
+                  <div className="rounded p-3 text-xs leading-relaxed" style={{ background: "#0d1117", border: "1px solid #30363d", fontFamily: "var(--font-data)" }}>
+                    git clone github.com/northstar-labs/frontend-takehome<br />
+                    npm install<br />
+                    npm test<br />
+                    npm run dev
+                  </div>
+                  <div className="rounded border border-red-500/25 bg-red-500/10 p-3 text-xs text-red-200/90">
+                    Cloud agent result: package.json contains a postinstall path that loads scripts/telemetry-check.js before tests run.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeWorkflow === "gemini" && (
+            <div className="rounded-lg overflow-hidden mb-4" style={{ background: "#fff", color: "#111827", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid #e5e7eb" }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">G</div>
+                  <div>
+                    <div className="text-sm font-semibold">Google Payments</div>
+                    <div className="text-xs text-gray-500">Secure checkout</div>
+                  </div>
+                </div>
+                <div className="px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs">https://payments.google.com</div>
+              </div>
+              <div className="p-5">
+                <div className="text-xs text-gray-500 mb-1">Merchant</div>
+                <div className="text-lg font-semibold">Google Gemini</div>
+                <div className="mt-4 p-4 rounded border border-gray-200 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Gemini Advanced</div>
+                      <div className="text-sm text-gray-500">Monthly subscription · Google account checkout</div>
+                    </div>
+                    <div className="text-xl font-semibold">$19.99</div>
+                  </div>
+                </div>
+                <button className="mt-4 w-full py-2 rounded bg-blue-600 text-white text-sm font-medium">Confirm purchase</button>
+                <div className="mt-3 text-xs text-gray-500">Protected by Google Payments. Manage subscriptions in your Google Account.</div>
+              </div>
+            </div>
+          )}
+
           {step === "scanning" && (
             <div className="flex flex-col items-center py-6 gap-3">
               <Loader2 size={22} className="text-amber-400 animate-spin" />
@@ -1988,7 +2334,7 @@ function ExtensionView() {
         <div className="border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between px-4 py-3">
             <button onClick={reset} className="flex items-center gap-2 text-left">
-              <Radio size={13} className={isResultStep ? "text-red-400" : "text-amber-400"} />
+              <Radio size={13} className={workflowSignal === "trusted" ? "text-green-400" : workflowSignal === "suspect" ? "text-red-400" : "text-amber-400"} />
               <span className="text-xs font-semibold text-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>SCAMRADAR</span>
             </button>
             <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Extension</span>
@@ -2040,30 +2386,44 @@ function ExtensionView() {
           <>
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3" style={{ scrollbarWidth: "none" }}>
               {confirmedIdentifier && (
-                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2 border border-amber-500/25" style={{ background: "#17140d" }}>
+                <div
+                  className={`sticky top-0 z-10 flex items-center justify-between gap-2 px-3 py-2 border ${pageVerdict === "trusted" ? "border-green-500/25" : "border-amber-500/25"}`}
+                  style={{ background: pageVerdict === "trusted" ? "rgba(20,83,45,0.16)" : "#17140d" }}
+                >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 flex items-center justify-center text-amber-400 border border-amber-500/25 flex-shrink-0" style={{ background: "rgba(245,158,11,0.08)" }}>
+                    <div
+                      className={`w-6 h-6 flex items-center justify-center border flex-shrink-0 ${pageVerdict === "trusted" ? "text-green-400 border-green-500/25" : "text-amber-400 border-amber-500/25"}`}
+                      style={{ background: pageVerdict === "trusted" ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)" }}
+                    >
                       {confirmedIdentifierIcon}
                     </div>
                     <div className="min-w-0">
-                    <div className="text-[9px] text-amber-400 font-medium mb-0.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>MATCHED SUSPECT</div>
+                    <div className={`text-[9px] font-medium mb-0.5 ${pageVerdict === "trusted" ? "text-green-400" : "text-amber-400"}`} style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                      {pageVerdict === "trusted" ? "VERIFIED PAGE" : pageVerdict === "caution" ? "REVIEW TARGET" : "MATCHED SUSPECT"}
+                    </div>
                       <Monospace className="text-foreground break-all">{confirmedIdentifier.value}</Monospace>
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setSelectedExtensionSuspectId(REPORTS[0].id);
-                      setStep("suspectDetail");
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors flex-shrink-0"
-                    style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
-                  >
-                    <User size={10} /> Open
-                  </button>
+                  {pageVerdict === "trusted" ? (
+                    <span className="flex items-center gap-1 px-2 py-1 text-[10px] text-green-300 border border-green-500/25 flex-shrink-0" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                      <CheckCircle size={10} /> Trusted
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSelectedExtensionSuspectId(workflow.suspectId);
+                        setStep("suspectDetail");
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors flex-shrink-0"
+                      style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                    >
+                      <User size={10} /> Open
+                    </button>
+                  )}
                 </div>
               )}
               {botMessages.map((msg, i) => {
-                const isConfirmPending = msg.kind === "confirm" && !botMessages.slice(i + 1).some(next => next.kind === "warning");
+                const isConfirmPending = msg.kind === "confirm" && !botMessages.slice(i + 1).some(next => ["warning", "safe", "caution", "report"].includes(next.kind));
                 return (
                 <div key={i}>
                   {msg.role === "bot" && msg.kind === "text" && (
@@ -2130,7 +2490,7 @@ function ExtensionView() {
                           </p>
                         </div>
                         <div className="px-3 py-2 space-y-1.5">
-                          {RESULT_INDICATORS.slice(1, 4).map(ind => (
+                          {workflow.indicators.map(ind => (
                             <div key={ind.label} className="flex items-start gap-2 text-[10px] text-foreground">
                               <span className={`mt-0.5 px-1 py-0.5 text-[9px] font-bold ${ind.sev === "HIGH" ? "bg-red-500/15 text-red-400 border border-red-500/25" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}
                                 style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
@@ -2142,12 +2502,19 @@ function ExtensionView() {
                         </div>
                         <div className="px-3 pb-3">
                           <div className="mb-2 text-[10px] text-green-300/90 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
-                            Recommended: do not send money, do not run code, and verify through an official channel before continuing.
+                            Recommended: {workflow.recommendations[0].toLowerCase()}, and preserve evidence before continuing.
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <button
+                              onClick={submitCurrentWorkflowReport}
+                              className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                            >
+                              <Plus size={11} /> Submit report
+                            </button>
+                            <button
                               onClick={() => {
-                                setSelectedExtensionReportId(REPORTS[0].id);
+                                setSelectedExtensionReportId(workflow.reportId);
                                 setStep("reportDetail");
                               }}
                               className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
@@ -2155,9 +2522,11 @@ function ExtensionView() {
                             >
                               <FileText size={11} /> View report
                             </button>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 mt-2">
                             <button
                               onClick={() => {
-                                setSelectedExtensionSuspectId(REPORTS[0].id);
+                                setSelectedExtensionSuspectId(workflow.suspectId);
                                 setStep("suspectDetail");
                               }}
                               className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
@@ -2167,6 +2536,134 @@ function ExtensionView() {
                             </button>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  )}
+                  {msg.role === "bot" && msg.kind === "safe" && (
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(34,197,94,0.14)", border: "1px solid rgba(34,197,94,0.32)" }}>
+                        <CheckCircle size={10} className="text-green-400" />
+                      </div>
+                      <div className="max-w-[92%] border border-green-500/25" style={{ background: "rgba(34,197,94,0.07)" }}>
+                        <div className="px-3 py-3 border-b border-green-500/15 flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-green-300 flex-shrink-0" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)" }}>
+                            <CheckCircle size={22} />
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold text-green-300" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                              TRUSTED PAGE SIGNALS
+                            </div>
+                            <p className="text-[10px] text-green-200/85 leading-relaxed mt-1" style={{ fontFamily: "var(--font-body)" }}>
+                              No immediate danger indicators were found in the visible page context.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="px-3 py-2 border-b border-green-500/15">
+                          <p className="text-[11px] leading-relaxed text-green-100/90" style={{ fontFamily: "var(--font-body)" }}>
+                            {msg.content}
+                          </p>
+                        </div>
+                        <div className="px-3 py-2 space-y-1.5">
+                          {workflow.indicators.map(ind => (
+                            <div key={ind.label} className="flex items-start gap-2 text-[10px] text-foreground">
+                              <span className="mt-0.5 px-1 py-0.5 text-[9px] font-bold bg-green-500/10 text-green-400 border border-green-500/20"
+                                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                                OK
+                              </span>
+                              <span>{ind.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="px-3 pb-3 text-[10px] text-green-300/90 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                          Recommended: {workflow.recommendations[0].toLowerCase()}.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {msg.role === "bot" && msg.kind === "caution" && (
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(245,158,11,0.14)", border: "1px solid rgba(245,158,11,0.32)" }}>
+                        <AlertTriangle size={10} className="text-amber-400" />
+                      </div>
+                      <div className="max-w-[92%] border border-amber-500/25" style={{ background: "rgba(245,158,11,0.07)" }}>
+                        <div className="px-3 py-3 border-b border-amber-500/15 flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-amber-300 flex-shrink-0" style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)" }}>
+                            <AlertTriangle size={22} />
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold text-amber-300" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                              {activeWorkflow === "linkedin" ? "SUBMIT FOR AGENT CHECK" : "INSUFFICIENT EVIDENCE"}
+                            </div>
+                            <p className="text-[10px] text-amber-200/85 leading-relaxed mt-1" style={{ fontFamily: "var(--font-body)" }}>
+                              {activeWorkflow === "linkedin" ? "Nothing clearly dangerous is visible, but the agent can verify and watch for related reports." : "Not enough to call this malicious, but the requested actions are risky."}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="px-3 py-2 border-b border-amber-500/15">
+                          <p className="text-[11px] leading-relaxed text-amber-100/90" style={{ fontFamily: "var(--font-body)" }}>
+                            {msg.content}
+                          </p>
+                        </div>
+                        <div className="px-3 py-2 space-y-1.5">
+                          {workflow.indicators.map(ind => (
+                            <div key={ind.label} className="flex items-start gap-2 text-[10px] text-foreground">
+                              <span className={`mt-0.5 px-1 py-0.5 text-[9px] font-bold ${ind.sev === "LOW" ? "bg-white/5 text-muted-foreground border border-border" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}
+                                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
+                                {ind.sev}
+                              </span>
+                              <span>{ind.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="px-3 pb-3">
+                          <div className="mb-2 text-[10px] text-amber-200/90 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                            Be careful: {workflow.recommendations[0].toLowerCase()}, and do not add credentials or personal files.
+                          </div>
+                          <button
+                            onClick={submitCurrentWorkflowReport}
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                            style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                          >
+                            <Plus size={11} /> {activeWorkflow === "linkedin" ? "Submit report" : "Save for code review"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {msg.role === "bot" && msg.kind === "report" && (
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(34,197,94,0.14)", border: "1px solid rgba(34,197,94,0.32)" }}>
+                        <FileText size={10} className="text-green-400" />
+                      </div>
+                      <div className="max-w-[92%] border border-green-500/20" style={{ background: "rgba(34,197,94,0.06)" }}>
+                        <div className="px-3 py-2 border-b border-green-500/15">
+                          <div className="text-[10px] font-bold text-green-300 mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>REPORT STATUS</div>
+                          <p className="text-[11px] leading-relaxed text-green-100/90" style={{ fontFamily: "var(--font-body)" }}>{msg.content}</p>
+                        </div>
+                        {workflow.status !== "trusted" && (
+                          <div className="px-3 py-2 grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedExtensionReportId(workflow.reportId);
+                                setStep("reportDetail");
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                            >
+                              <FileText size={11} /> Open report
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedExtensionSuspectId(workflow.suspectId);
+                                setStep("suspectDetail");
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-amber-300 border border-amber-500/25 hover:bg-amber-500/10 transition-colors"
+                              style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+                            >
+                              <User size={11} /> Open suspect
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
