@@ -25,15 +25,15 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type RiskLevel = "GREEN" | "YELLOW" | "ORANGE" | "RED";
-type View = "dashboard" | "case" | "queue" | "entities" | "extension";
+type RiskLevel = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BANNED";
+type View = "dashboard" | "report" | "suspects" | "extension";
 
-interface Case {
+interface Report {
   id: string;
   // identifier this user submitted — stored on the server, shown to the submitter
   reportedIdentifier: string;
   reportedIdentifierType: "linkedin_url" | "email" | "domain" | "github_url" | "wallet" | "phone" | "ebay_handle";
-  // how many users reported the same entity (fuzzy-matched server-side)
+  // how many users reported the same suspect (fuzzy-matched server-side)
   corroborationCount: number;
   type: string;
   platform: string;
@@ -52,8 +52,8 @@ interface Alert {
   id: number;
   time: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM";
-  caseId: string;
-  entity: string;
+  reportId: string;
+  suspect: string;
   message: string;
 }
 
@@ -80,9 +80,10 @@ const RISK_CONFIG: Record<RiskLevel, { label: string; color: string; dot: string
   YELLOW: { label: "MONITOR",          color: "#eab308", dot: "bg-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-400", border: "border-yellow-500/25" },
   ORANGE: { label: "ELEVATED RISK",    color: "#f97316", dot: "bg-orange-500", bg: "bg-orange-500/10", text: "text-orange-400", border: "border-orange-500/25" },
   RED:    { label: "HIGH RISK SIGNAL", color: "#ef4444", dot: "bg-red-500",    bg: "bg-red-500/10",    text: "text-red-400",    border: "border-red-500/25" },
+  BANNED: { label: "BANNED",           color: "#a78bfa", dot: "bg-violet-400", bg: "bg-violet-500/10", text: "text-violet-300", border: "border-violet-400/30" },
 };
 
-const IDENTIFIER_TYPE_LABEL: Record<Case["reportedIdentifierType"], string> = {
+const IDENTIFIER_TYPE_LABEL: Record<Report["reportedIdentifierType"], string> = {
   linkedin_url: "LinkedIn URL",
   email:        "Email address",
   domain:       "Domain",
@@ -92,7 +93,7 @@ const IDENTIFIER_TYPE_LABEL: Record<Case["reportedIdentifierType"], string> = {
   ebay_handle:  "eBay handle",
 };
 
-const CASES: Case[] = [
+const REPORTS: Report[] = [
   {
     id: "SR-2024-0347",
     reportedIdentifier:     "linkedin.com/in/alex-morgan-recruiter",
@@ -102,7 +103,7 @@ const CASES: Case[] = [
     platform: "LinkedIn",
     risk: "RED",
     score: 87,
-    status: "PENDING_REVIEW",
+    status: "ACCEPTED",
     lastActivity: "2h ago",
     indicators: ["Fake domain", "Equipment purchase request", "Off-platform redirect", "Zelle payment request"],
     summary: "Claims to be Senior Technical Recruiter at Meta. Uses non-Meta domain registered 43 days ago. Requested upfront equipment purchase of $2,400 via Zelle before \"onboarding.\"",
@@ -184,12 +185,12 @@ const CASES: Case[] = [
     corroborationCount:     6,
     type: "Payment Fraud",
     platform: "eBay",
-    risk: "ORANGE",
-    score: 58,
-    status: "INVESTIGATING",
+    risk: "BANNED",
+    score: 96,
+    status: "CLOSED",
     lastActivity: "2d ago",
-    indicators: ["Off-platform payment", "Fake escrow service", "Urgency pressure"],
-    summary: "Seller requesting Zelle/Venmo payment outside eBay buyer protection. Uses fake escrow site escrow-safe-pay.com to appear legitimate.",
+    indicators: ["Official platform action", "Off-platform payment", "Fake escrow service", "Urgency pressure"],
+    summary: "Seller requesting Zelle/Venmo payment outside eBay buyer protection. Uses fake escrow site escrow-safe-pay.com to appear legitimate. The marketplace account is marked as banned after platform action.",
     subagentsActive: false,
   },
   {
@@ -210,16 +211,16 @@ const CASES: Case[] = [
 ];
 
 const ALERTS: Alert[] = [
-  { id: 1, time: "09:42", severity: "CRITICAL", caseId: "SR-2024-0347", entity: "linkedin.com/in/alex-morgan-recruiter", message: "Payment request detected: Zelle ($2,400). Do not send funds." },
-  { id: 2, time: "09:38", severity: "CRITICAL", caseId: "SR-2024-0341", entity: "techventuresdao.io",                    message: "Wallet address collection detected. Do not share crypto credentials." },
-  { id: 3, time: "09:31", severity: "HIGH",     caseId: "SR-2024-0339", entity: "github.com/devhire-solutions",          message: "Script execution request in submitted PR. Do not run code." },
-  { id: 4, time: "08:55", severity: "MEDIUM",   caseId: "SR-2024-0347", entity: "linkedin.com/in/alex-morgan-recruiter", message: "14 corroborating reports matched this entity. Pattern confidence: 94%." },
-  { id: 5, time: "08:12", severity: "MEDIUM",   caseId: "SR-2024-0335", entity: "marketplace_seller_99",                 message: "Fake escrow pattern matches 6 prior reports for this entity." },
-  { id: 6, time: "07:44", severity: "HIGH",     caseId: "SR-2024-0341", entity: "techventuresdao.io",                    message: "Associated wallet 0x7a3f…c82e flagged in 3 AML databases." },
+  { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Payment request detected: Zelle ($2,400). Do not send funds." },
+  { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Wallet address collection detected. Do not share crypto credentials." },
+  { id: 3, time: "09:31", severity: "HIGH",     reportId: "SR-2024-0339", suspect: "github.com/devhire-solutions",          message: "Script execution request in submitted PR. Do not run code." },
+  { id: 4, time: "08:55", severity: "MEDIUM",   reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "14 corroborating reports matched this suspect. Pattern confidence: 94%." },
+  { id: 5, time: "08:12", severity: "MEDIUM",   reportId: "SR-2024-0335", suspect: "marketplace_seller_99",                 message: "Fake escrow pattern matches 6 prior reports for this suspect." },
+  { id: 6, time: "07:44", severity: "HIGH",     reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Associated wallet 0x7a3f…c82e flagged in 3 AML databases." },
 ];
 
 const INITIAL_CHAT: ChatMessage[] = [
-  { role: "user", content: "What are the biggest red flags in this case?" },
+  { role: "user", content: "What are the biggest red flags in this report?" },
   {
     role: "assistant",
     content: "Three high-severity indicators detected:\n\n1. Domain meta-careers.io was registered 43 days ago. Meta's official recruiter domains are meta.com and fb.com exclusively — confirmed via WHOIS and Meta's published careers policy.\n\n2. Upfront equipment purchase of $2,400 via Zelle matches advance-fee fraud patterns documented across 14 similar reports. No legitimate employer requires candidates to purchase equipment pre-hire.\n\n3. Redirect to WhatsApp occurred within 2 messages — a documented tactic to exit platform monitoring.\n\nEvidence strength: Strong. Corroboration: 14 reports.",
@@ -231,18 +232,12 @@ const INITIAL_CHAT: ChatMessage[] = [
   },
 ];
 
-const QUEUE_ITEMS = [
-  { id: "SR-2024-0347", identifier: "linkedin.com/in/alex-morgan-recruiter", type: "Recruiter Fraud",  risk: "RED"    as RiskLevel, score: 87, corroborationCount: 14, assignedTo: "Unassigned", submitted: "Today 09:30",     reason: "High-confidence match. 14 corroborating reports. Ready for coordinated warning decision (requires human approval)." },
-  { id: "SR-2024-0341", identifier: "techventuresdao.io",                    type: "Investment Fraud", risk: "RED"    as RiskLevel, score: 91, corroborationCount: 8,  assignedTo: "J. Rivera",   submitted: "Today 05:12",     reason: "AML-style wallet pattern detected. Requires compliance review before any escalation or public action." },
-  { id: "SR-2024-0330", identifier: "sarah.chen@deloitte-consulting.net",    type: "Impersonation",    risk: "YELLOW" as RiskLevel, score: 41, corroborationCount: 2,  assignedTo: "Unassigned", submitted: "Yesterday 14:20", reason: "Domain mismatch confirmed. Awaiting manual identity verification. Low corroboration — proceed carefully." },
-];
-
 const EVIDENCE_TIMELINE = [
   { time: "09:42", icon: "payment",  label: "Payment request detected",    detail: "Zelle payment for $2,400 requested in conversation",             risk: "RED"    as RiskLevel },
   { time: "09:38", icon: "redirect", label: "Off-platform redirect",        detail: "Recruiter asked to continue conversation on WhatsApp",           risk: "RED"    as RiskLevel },
   { time: "09:31", icon: "domain",   label: "Domain analysis complete",     detail: "meta-careers.io registered 43 days ago via GoDaddy. Not Meta.", risk: "RED"    as RiskLevel },
   { time: "09:20", icon: "cluster",  label: "14 similar reports clustered", detail: "Superlinked similarity match: recruiter persona pattern, 94%",  risk: "ORANGE" as RiskLevel },
-  { time: "09:15", icon: "search",   label: "Web due diligence complete",   detail: "No meta.com affiliation found. Tavily: 0 results for entity.",  risk: "ORANGE" as RiskLevel },
+  { time: "09:15", icon: "search",   label: "Web due diligence complete",   detail: "No meta.com affiliation found. Tavily: 0 results for suspect.", risk: "ORANGE" as RiskLevel },
   { time: "09:10", icon: "intake",   label: "Report submitted",             detail: "User submitted conversation log + LinkedIn URL",                 risk: "YELLOW" as RiskLevel },
 ];
 
@@ -263,11 +258,11 @@ function RiskBadge({ level, size = "md" }: { level: RiskLevel; size?: "sm" | "md
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    TRIAGING:       "text-blue-400 bg-blue-500/10 border-blue-500/20",
-    INVESTIGATING:  "text-purple-400 bg-purple-500/10 border-purple-500/20",
-    PENDING_REVIEW: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    REVIEWED:       "text-green-400 bg-green-500/10 border-green-500/20",
-    CLOSED:         "text-muted-foreground bg-muted/40 border-border",
+    TRIAGING:      "text-blue-400 bg-blue-500/10 border-blue-500/20",
+    INVESTIGATING: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+    ACCEPTED:      "text-green-400 bg-green-500/10 border-green-500/20",
+    NEEDS_INFO:    "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    CLOSED:        "text-muted-foreground bg-muted/40 border-border",
   };
   return (
     <span
@@ -326,11 +321,11 @@ function LiveDot() {
   );
 }
 
-// ─── Entity Graph (SVG) ───────────────────────────────────────────────────────
+// ─── Suspect Graph (SVG) ──────────────────────────────────────────────────────
 
-function EntityGraph() {
+function SuspectGraph() {
   const nodes = [
-    { x: 200, y: 140, label: "Alex Morgan",              sub: "Primary Entity",     r: 28, color: "#ef4444", textColor: "#fca5a5" },
+    { x: 200, y: 140, label: "Alex Morgan",              sub: "Primary Suspect",    r: 28, color: "#ef4444", textColor: "#fca5a5" },
     { x: 80,  y: 60,  label: "LinkedIn Profile",          sub: "/in/alex-morgan-rec", r: 18, color: "#3b82f6", textColor: "#93c5fd" },
     { x: 200, y: 40,  label: "meta-careers.io",           sub: "Reg. 43 days ago",   r: 18, color: "#f97316", textColor: "#fdba74" },
     { x: 330, y: 60,  label: "alex.morgan@…careers.io",   sub: "Email",              r: 18, color: "#8b5cf6", textColor: "#c4b5fd" },
@@ -383,9 +378,8 @@ function EntityGraph() {
 function Sidebar({ view, setView, onSubmit }: { view: View; setView: (v: View) => void; onSubmit: () => void }) {
   const navItems: { v: View | null; icon: ReactNode; label: string; action?: () => void }[] = [
     { v: "dashboard",  icon: <BarChart2 size={16} />, label: "Dashboard" },
-    { v: "case",       icon: <Shield size={16} />,   label: "Cases" },
-    { v: "queue",      icon: <Layers size={16} />,   label: "Review Queue" },
-    { v: "entities",   icon: <Network size={16} />,  label: "Entities" },
+    { v: "report",     icon: <Shield size={16} />,   label: "Reports" },
+    { v: "suspects",   icon: <Network size={16} />,  label: "Suspects" },
     { v: "extension",  icon: <Puzzle size={16} />,   label: "Extension UI" },
   ];
 
@@ -461,7 +455,7 @@ function Sidebar({ view, setView, onSubmit }: { view: View; setView: (v: View) =
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-xs text-foreground truncate" style={{ fontFamily: "var(--font-body)" }}>Analyst</div>
-          <div className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Tier 2 Reviewer</div>
+          <div className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>My submissions</div>
         </div>
         <Settings size={13} className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors" />
       </div>
@@ -471,7 +465,7 @@ function Sidebar({ view, setView, onSubmit }: { view: View; setView: (v: View) =
 
 // ─── Alert Feed ───────────────────────────────────────────────────────────────
 
-function AlertFeed({ alerts, onCaseClick }: { alerts: Alert[]; onCaseClick: (id: string) => void }) {
+function AlertFeed({ alerts, onReportClick }: { alerts: Alert[]; onReportClick: (id: string) => void }) {
   const severityConfig = {
     CRITICAL: { icon: <ShieldAlert size={12} />, color: "text-red-400",    border: "border-l-red-500",    bg: "hover:bg-red-500/5" },
     HIGH:     { icon: <AlertTriangle size={12} />, color: "text-orange-400", border: "border-l-orange-500", bg: "hover:bg-orange-500/5" },
@@ -493,7 +487,7 @@ function AlertFeed({ alerts, onCaseClick }: { alerts: Alert[]; onCaseClick: (id:
           return (
             <button
               key={alert.id}
-              onClick={() => onCaseClick(alert.caseId)}
+              onClick={() => onReportClick(alert.reportId)}
               className={`w-full text-left px-3 py-2.5 border-l-2 ${cfg.border} ${cfg.bg} transition-colors`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -504,7 +498,7 @@ function AlertFeed({ alerts, onCaseClick }: { alerts: Alert[]; onCaseClick: (id:
                 <Monospace className="text-muted-foreground">{alert.time}</Monospace>
               </div>
               <div className="mb-0.5">
-                <Monospace className="text-foreground/60">{alert.entity}</Monospace>
+                <Monospace className="text-foreground/60">{alert.suspect}</Monospace>
               </div>
               <div className="text-[11px] text-muted-foreground leading-snug">{alert.message}</div>
             </button>
@@ -515,12 +509,12 @@ function AlertFeed({ alerts, onCaseClick }: { alerts: Alert[]; onCaseClick: (id:
   );
 }
 
-// ─── Cases Table ─────────────────────────────────────────────────────────────
+// ─── Reports Table ───────────────────────────────────────────────────────────
 
 
-function CasesTable({ cases, onSelect }: { cases: Case[]; onSelect: (id: string) => void }) {
+function ReportsTable({ reports, onSelect }: { reports: Report[]; onSelect: (id: string) => void }) {
   const [sortField, setSortField] = useState<"score" | "corroborationCount" | "lastActivity">("score");
-  const sorted = [...cases].sort((a, b) => {
+  const sorted = [...reports].sort((a, b) => {
     if (sortField === "score") return b.score - a.score;
     if (sortField === "corroborationCount") return b.corroborationCount - a.corroborationCount;
     return 0;
@@ -533,7 +527,7 @@ function CasesTable({ cases, onSelect }: { cases: Case[]; onSelect: (id: string)
           <SectionHeader>My Reports</SectionHeader>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>{cases.length} submitted</span>
+          <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>{reports.length} submitted</span>
           <button className="p-1 text-muted-foreground hover:text-foreground transition-colors">
             <SlidersHorizontal size={13} />
           </button>
@@ -580,7 +574,7 @@ function CasesTable({ cases, onSelect }: { cases: Case[]; onSelect: (id: string)
                   <span className={`font-bold text-sm ${RISK_CONFIG[c.risk].text}`} style={{ fontFamily: "var(--font-display)" }}>{c.score}</span>
                 </td>
                 <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-1" title={`${c.corroborationCount - 1} other users reported the same entity. Their submissions are desensitized before being shared.`}>
+                  <div className="flex items-center gap-1" title={`${c.corroborationCount - 1} other users reported the same suspect. Their submissions are desensitized before being shared.`}>
                     <Monospace className={c.corroborationCount >= 10 ? "text-amber-400" : "text-muted-foreground"}>
                       {c.corroborationCount > 1 ? `+${c.corroborationCount - 1}` : "—"}
                     </Monospace>
@@ -604,16 +598,16 @@ function CasesTable({ cases, onSelect }: { cases: Case[]; onSelect: (id: string)
 
 // ─── Dashboard View ───────────────────────────────────────────────────────────
 
-function DashboardView({ onSelectCase }: { onSelectCase: (id: string) => void }) {
-  const redCount      = CASES.filter(c => c.risk === "RED").length;
-  const pendingReview = CASES.filter(c => c.status === "PENDING_REVIEW").length;
+function DashboardView({ onSelectReport }: { onSelectReport: (id: string) => void }) {
+  const redCount      = REPORTS.filter(c => c.risk === "RED").length;
+  const acceptedCount = REPORTS.filter(c => c.status === "ACCEPTED").length;
   // corroboration counts come from the aggregate — we show counts, never other users' data
-  const totalCorroborations = CASES.reduce((a, c) => a + c.corroborationCount, 0);
+  const totalCorroborations = REPORTS.reduce((a, c) => a + c.corroborationCount, 0);
 
   const stats = [
-    { label: "My Reports",        value: CASES.length,          sub: "entities you submitted",         color: "text-foreground",  icon: <Shield size={16} className="text-amber-400" /> },
+    { label: "My Reports",        value: REPORTS.length,        sub: "submissions you created",        color: "text-foreground",  icon: <Shield size={16} className="text-amber-400" /> },
     { label: "High Risk Signals", value: redCount,              sub: "require immediate action",        color: "text-red-400",     icon: <ShieldAlert size={16} className="text-red-400" /> },
-    { label: "Pending Review",    value: pendingReview,         sub: "awaiting human approval",         color: "text-amber-400",   icon: <Eye size={16} className="text-amber-400" /> },
+    { label: "Accepted",          value: acceptedCount,         sub: "accepted by agent",               color: "text-green-400",   icon: <CheckCircle size={16} className="text-green-400" /> },
     { label: "Corroborations",    value: totalCorroborations,   sub: "independent reports (count only)", color: "text-purple-400",  icon: <Users size={16} className="text-purple-400" /> },
   ];
 
@@ -630,7 +624,7 @@ function DashboardView({ onSelectCase }: { onSelectCase: (id: string) => void })
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
             <Search size={13} className="text-muted-foreground" />
-            <input placeholder="Search cases, entities, IDs…" className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-48" style={{ fontFamily: "var(--font-body)" }} />
+            <input placeholder="Search reports, suspects, IDs…" className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-48" style={{ fontFamily: "var(--font-body)" }} />
           </div>
           <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors">
             <Bell size={16} />
@@ -659,7 +653,7 @@ function DashboardView({ onSelectCase }: { onSelectCase: (id: string) => void })
       <div className="flex items-center gap-3 px-5 py-2 border-b border-border flex-shrink-0" style={{ background: "rgba(99,102,241,0.06)" }}>
         <ShieldCheck size={13} className="text-indigo-400 flex-shrink-0" />
         <p className="text-[11px] text-indigo-300/70 leading-snug">
-          <strong className="text-indigo-300">Private by default.</strong> You see only entities you personally reported. Raw submissions are stored securely on the server and never shared directly. When other reporters have flagged the same entity, their materials are desensitized before being shared with you — and yours with them.
+          <strong className="text-indigo-300">Private by default.</strong> You manage your own reports and the suspects you submitted. Raw submissions are stored securely on the server and never shared directly. When other reporters have flagged the same suspect, their materials are desensitized before being shared with you — and yours with them.
         </p>
       </div>
 
@@ -667,21 +661,196 @@ function DashboardView({ onSelectCase }: { onSelectCase: (id: string) => void })
       <div className="flex flex-1 overflow-hidden">
         {/* Alert feed */}
         <div className="w-72 border-r border-border overflow-hidden flex-shrink-0">
-          <AlertFeed alerts={ALERTS} onCaseClick={onSelectCase} />
+          <AlertFeed alerts={ALERTS} onReportClick={onSelectReport} />
         </div>
-        {/* Cases table */}
+        {/* Reports table */}
         <div className="flex-1 overflow-hidden">
-          <CasesTable cases={CASES} onSelect={onSelectCase} />
+          <ReportsTable reports={REPORTS} onSelect={onSelectReport} />
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Case Detail View ─────────────────────────────────────────────────────────
+// ─── Report Detail View ───────────────────────────────────────────────────────
 
-function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void }) {
-  const c = CASES.find(x => x.id === caseId) ?? CASES[0];
+function ReportDetailView({ reportId, onBack, onOpenSuspect }: { reportId: string; onBack: () => void; onOpenSuspect: (id: string) => void }) {
+  const report = REPORTS.find(x => x.id === reportId) ?? REPORTS[0];
+  const mine = report.communitySubmissions?.find(sub => sub.isMine);
+  const submittedText = mine?.myRaw ?? report.summary;
+  const materialType = mine?.materialType ?? "Submitted material";
+  const submittedAt = mine?.submittedAt ?? report.lastActivity;
+  const agentStatusCopy = report.status === "ACCEPTED"
+    ? "Accepted for analysis"
+    : report.status === "NEEDS_INFO"
+      ? "Needs more context"
+      : "Analysis in progress";
+
+  const safeSteps = [
+    "Do not send money, credentials, OTPs, seed phrases, or identity documents.",
+    "Do not run scripts or install software from the submitted interaction.",
+    "Verify through an official channel you find independently.",
+  ];
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center gap-4 px-5 py-3 border-b border-border flex-shrink-0">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-sm">
+          <ArrowLeft size={14} />
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-base font-semibold text-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.02em" }}>Report Submission</span>
+            <StatusPill status={report.status} />
+            <RiskBadge level={report.risk} />
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Monospace className="text-muted-foreground">{report.id}</Monospace>
+            <span className="text-border">·</span>
+            <Monospace className="text-muted-foreground">{report.platform}</Monospace>
+            <span className="text-border">·</span>
+            <span className="text-[10px] text-muted-foreground">{materialType}</span>
+          </div>
+        </div>
+        <button
+          onClick={() => onOpenSuspect(report.id)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-border text-muted-foreground hover:text-foreground hover:border-border/60 transition-colors"
+          style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+        >
+          <Network size={12} />
+          VIEW SUSPECT INTELLIGENCE
+        </button>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-72 border-r border-border overflow-y-auto flex-shrink-0 px-4 py-4 space-y-5" style={{ scrollbarWidth: "none" }}>
+          <div>
+            <SectionHeader>Submission Status</SectionHeader>
+            <div className="p-3 border border-green-500/25" style={{ background: "rgba(34,197,94,0.07)" }}>
+              <div className="flex items-start gap-2">
+                <CheckCircle size={14} className="text-green-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="text-sm text-green-400 font-medium" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.04em" }}>{agentStatusCopy}</div>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">The agent accepted this submission because it contains enough material for triage and suspect matching.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <SectionHeader>Submitted Suspect</SectionHeader>
+            <div className="px-2 py-1.5 border border-border space-y-0.5" style={{ background: "rgba(255,255,255,0.03)" }}>
+              <Monospace className="text-foreground/80 break-all block">{report.reportedIdentifier}</Monospace>
+              <div className="text-[9px] text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>{IDENTIFIER_TYPE_LABEL[report.reportedIdentifierType]}</div>
+            </div>
+          </div>
+
+          <div>
+            <SectionHeader>Submission Metadata</SectionHeader>
+            <div className="space-y-2 text-[11px]">
+              {[
+                ["Source", report.platform],
+                ["Submitted", submittedAt],
+                ["Material", materialType],
+                ["Current status", report.status.replace("_", " ")],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3 border-b border-border/60 pb-1.5">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className="text-foreground text-right">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <SectionHeader>Initial Score</SectionHeader>
+            <div className="flex items-center gap-3">
+              <ScoreGauge score={report.score} risk={report.risk} size={72} />
+              <div>
+                <RiskBadge level={report.risk} size="sm" />
+                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">Score is based only on this submission and immediate matching signals.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5" style={{ scrollbarWidth: "none" }}>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-4 border border-border" style={{ background: "var(--card)" }}>
+              <SectionHeader>Agent Intake</SectionHeader>
+              <div className="text-2xl font-bold text-green-400" style={{ fontFamily: "var(--font-display)" }}>ACCEPTED</div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">Submission is usable for automated due diligence.</p>
+            </div>
+            <div className="p-4 border border-border" style={{ background: "var(--card)" }}>
+              <SectionHeader>Danger Check</SectionHeader>
+              <div className={`text-2xl font-bold ${RISK_CONFIG[report.risk].text}`} style={{ fontFamily: "var(--font-display)" }}>{report.indicators.length}</div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">Risk indicators found in this report.</p>
+            </div>
+            <div className="p-4 border border-border" style={{ background: "var(--card)" }}>
+              <SectionHeader>Suspect Match</SectionHeader>
+              <div className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }}>{report.corroborationCount}</div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">Aggregate reporters matched this suspect.</p>
+            </div>
+          </div>
+
+          <div className="border border-border" style={{ background: "var(--card)" }}>
+            <div className="px-5 py-3 border-b border-border">
+              <SectionHeader>Your Submitted Material</SectionHeader>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap">{submittedText}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border border-border" style={{ background: "var(--card)" }}>
+              <div className="px-4 py-3 border-b border-border">
+                <SectionHeader>Detected In This Report</SectionHeader>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {report.indicators.map((indicator, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                    <AlertTriangle size={11} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-foreground">{indicator}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border border-border" style={{ background: "var(--card)" }}>
+              <div className="px-4 py-3 border-b border-border">
+                <SectionHeader>Recommended Next Steps</SectionHeader>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {safeSteps.map((step, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11px]">
+                    <CheckCircle size={11} className="text-green-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-foreground">{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="border border-border" style={{ background: "rgba(99,102,241,0.06)", borderColor: "rgba(99,102,241,0.22)" }}>
+            <div className="px-4 py-3 flex items-start gap-2">
+              <ShieldCheck size={13} className="text-indigo-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-indigo-300/75 leading-relaxed">
+                This report view is only about your submitted material. Broader suspect intelligence, corroborations, evidence timeline, graph, and matched submissions live under Suspects.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Suspect Detail View ──────────────────────────────────────────────────────
+
+function SuspectDetailView({ suspectId, onBack }: { suspectId: string; onBack: () => void }) {
+  const c = REPORTS.find(x => x.id === suspectId) ?? REPORTS[0];
   const cfg = RISK_CONFIG[c.risk];
 
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
@@ -698,7 +867,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
     setMessages(prev => [
       ...prev,
       { role: "user", content: input },
-      { role: "assistant", content: "Analyzing submitted materials and cross-referencing with available evidence… This is a demo response. In production, a fast LLM provides real-time answers based on case data, Tavily search results, and Attio CRM records." },
+      { role: "assistant", content: "Analyzing submitted materials and cross-referencing with available evidence… This is a demo response. In production, a fast LLM provides real-time answers based on report data, Tavily search results, and Attio CRM records." },
     ]);
     setInput("");
   }
@@ -740,20 +909,16 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
-            <Flag size={12} />
-            ESCALATE
-          </button>
           <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-border text-muted-foreground hover:text-foreground hover:border-border/60 transition-colors" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
             <FileText size={12} />
-            REPORT PACKET
+            SUSPECT SUMMARY
           </button>
         </div>
       </div>
 
       {/* 3-column grid */}
       <div className="flex flex-1 overflow-hidden">
-        {/* LEFT: Entity + Score + Indicators */}
+        {/* LEFT: Suspect + Score + Indicators */}
         <div className="w-60 border-r border-border overflow-y-auto flex-shrink-0 px-4 py-4 space-y-5" style={{ scrollbarWidth: "none" }}>
           {/* Score */}
           <div>
@@ -769,7 +934,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
             </div>
           </div>
 
-          {/* Entity identifiers */}
+          {/* Suspect identifiers */}
           <div>
             <SectionHeader>Reported Identifier</SectionHeader>
             <div className="space-y-2">
@@ -813,9 +978,9 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
             </div>
             <div className="mt-2 px-2 py-1.5 border border-border" style={{ background: "rgba(255,255,255,0.02)" }}>
               <div className="text-[9px] text-muted-foreground leading-relaxed" style={{ fontFamily: "var(--font-data)" }}>
-                {c.corroborationCount - 1} other submission{c.corroborationCount - 1 !== 1 ? "s" : ""} matched this entity.<br />
+                {c.corroborationCount - 1} other submission{c.corroborationCount - 1 !== 1 ? "s" : ""} matched this suspect.<br />
                 Their raw materials stay on the server.<br />
-                See the Community tab for desensitized versions.
+                See matched submissions for desensitized versions.
               </div>
             </div>
           </div>
@@ -849,8 +1014,8 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
                 className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === tab ? "border-amber-500 text-amber-400" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}
               >
-                {tab === "timeline" ? "EVIDENCE TIMELINE" : tab === "graph" ? "ENTITY GRAPH" : (
-                  <>COMMUNITY SUBMISSIONS {c.communitySubmissions && <span className="text-[9px] px-1 py-0.5 rounded-sm" style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>{c.communitySubmissions.length}</span>}</>
+                {tab === "timeline" ? "EVIDENCE TIMELINE" : tab === "graph" ? "SUSPECT GRAPH" : (
+                  <>MATCHED SUBMISSIONS {c.communitySubmissions && <span className="text-[9px] px-1 py-0.5 rounded-sm" style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>{c.communitySubmissions.length}</span>}</>
                 )}
               </button>
             ))}
@@ -886,7 +1051,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
           {activeTab === "graph" && (
             <div className="flex-1 flex items-center justify-center px-4 py-4">
               <div className="w-full h-full max-h-72">
-                <EntityGraph />
+                <SuspectGraph />
               </div>
             </div>
           )}
@@ -899,7 +1064,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
                 <div>
                   <div className="text-[10px] font-semibold text-indigo-400 mb-0.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>AUTOMATICALLY DESENSITIZED BEFORE SHARING</div>
                   <p className="text-[10px] text-indigo-300/70 leading-relaxed">
-                    All submissions below were scrubbed of personal details, contact info, amounts, and identifiers by the server before being shared across reporters who flagged the same entity. Names, URLs, payment handles, and dates are replaced with <code className="text-indigo-300">[TOKENS]</code>. Your raw submission is shown only to you.
+                    All submissions below were scrubbed of personal details, contact info, amounts, and identifiers by the server before being shared across reporters who flagged the same suspect. Names, URLs, payment handles, and dates are replaced with <code className="text-indigo-300">[TOKENS]</code>. Your raw submission is shown only to you.
                   </p>
                 </div>
               </div>
@@ -969,7 +1134,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
         <div className="w-80 flex flex-col flex-shrink-0">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border flex-shrink-0">
             <MessageSquare size={13} className="text-amber-400" />
-            <SectionHeader>Case Q&amp;A</SectionHeader>
+              <SectionHeader>Suspect Q&amp;A</SectionHeader>
             <div className="ml-auto flex items-center gap-1.5">
               <LiveDot />
               <span className="text-[10px] text-green-400" style={{ fontFamily: "var(--font-data)" }}>REAL-TIME</span>
@@ -1003,7 +1168,7 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && sendMessage()}
-              placeholder="Ask about this case…"
+              placeholder="Ask about this suspect…"
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
               style={{ fontFamily: "var(--font-body)" }}
             />
@@ -1028,184 +1193,368 @@ function CaseDetailView({ caseId, onBack }: { caseId: string; onBack: () => void
   );
 }
 
-// ─── Reviewer Queue View ──────────────────────────────────────────────────────
+// ─── Suspects View ────────────────────────────────────────────────────────────
 
-function ReviewerQueueView() {
-  const [expandedId, setExpandedId] = useState<string | null>(QUEUE_ITEMS[0].id);
+function SuspectsView({ onSelectSuspect }: { onSelectSuspect: (id: string) => void }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilters, setTypeFilters] = useState<Report["reportedIdentifierType"][]>([]);
+  const [riskFilters, setRiskFilters] = useState<RiskLevel[]>([]);
+  const [sortBy, setSortBy] = useState<"risk" | "reporters" | "last_seen" | "identifier">("risk");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [openHeaderFilter, setOpenHeaderFilter] = useState<"type" | "risk" | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 4;
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-3.5 border-b border-border flex-shrink-0">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground leading-none" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.03em" }}>
-            REVIEWER QUEUE
-          </h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Cases requiring human approval before any public action is taken</p>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-amber-400 border border-amber-500/25 px-2.5 py-1.5" style={{ background: "rgba(245,158,11,0.07)", fontFamily: "var(--font-data)" }}>
-          <Eye size={11} />
-          {QUEUE_ITEMS.length} PENDING APPROVAL
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3" style={{ scrollbarWidth: "none" }}>
-        {QUEUE_ITEMS.map(item => {
-          const expanded = expandedId === item.id;
-          const cfg = RISK_CONFIG[item.risk];
-          return (
-            <div
-              key={item.id}
-              className="border border-border overflow-hidden transition-all"
-              style={{ background: "var(--card)" }}
-            >
-              <button
-                className="w-full flex items-center gap-4 px-5 py-3.5 text-left hover:bg-white/5 transition-colors"
-                onClick={() => setExpandedId(expanded ? null : item.id)}
-              >
-                <div className={`w-10 h-10 flex items-center justify-center flex-shrink-0 ${cfg.bg}`} style={{ border: `1px solid ${cfg.color}40` }}>
-                  <ScoreGauge score={item.score} risk={item.risk} size={36} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5 mb-0.5">
-                    <Monospace className="text-foreground/80">{item.identifier}</Monospace>
-                    <RiskBadge level={item.risk} size="sm" />
-                    <span className="text-[10px] text-muted-foreground border border-border px-1.5 py-0.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>{item.type}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>
-                    <span>{item.id}</span>
-                    <span>·</span>
-                    <span>{item.corroborationCount} corroborations</span>
-                    <span>·</span>
-                    <span>Submitted {item.submitted}</span>
-                    <span>·</span>
-                    <span>{item.assignedTo}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {expanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                </div>
-              </button>
-
-              {expanded && (
-                <div className="border-t border-border">
-                  <div className="px-5 py-4">
-                    <div className="mb-4">
-                      <SectionHeader>Review Reason</SectionHeader>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{item.reason}</p>
-                    </div>
-                    <div className="mb-5 p-3 border border-amber-500/20" style={{ background: "rgba(245,158,11,0.05)" }}>
-                      <div className="flex items-start gap-2">
-                        <AlertCircle size={13} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-[11px] text-amber-400/80 leading-relaxed">
-                          <strong className="text-amber-400">Important:</strong> Any public warning, coordinated report, or high-confidence label requires human approval per ScamRadar safety policy. Automated systems do not make public accusations.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-green-900 bg-green-500 hover:bg-green-400 transition-colors"
-                        style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
-                      >
-                        <CheckCircle size={13} />
-                        APPROVE FOR WARNING
-                      </button>
-                      <button
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium border transition-colors"
-                        style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em", borderColor: "rgba(239,68,68,0.4)", color: "#f87171" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(239,68,68,0.08)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <XCircle size={13} />
-                        REJECT / MONITOR
-                      </button>
-                      <button
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium border border-border text-muted-foreground hover:text-foreground transition-colors ml-auto"
-                        style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
-                      >
-                        <RefreshCw size={12} />
-                        REQUEST MORE EVIDENCE
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Entities View (placeholder) ──────────────────────────────────────────────
-
-function EntitiesView() {
-  const types = [
-    { icon: <User size={14} />,      label: "Persons / Profiles", count: 23, color: "text-blue-400" },
-    { icon: <Building2 size={14} />, label: "Organizations",      count: 8,  color: "text-purple-400" },
-    { icon: <Globe size={14} />,     label: "Domains",            count: 31, color: "text-amber-400" },
-    { icon: <Mail size={14} />,      label: "Email Addresses",    count: 47, color: "text-green-400" },
-    { icon: <Wallet size={14} />,    label: "Wallet Addresses",   count: 12, color: "text-orange-400" },
-    { icon: <Phone size={14} />,     label: "Phone Numbers",      count: 18, color: "text-red-400" },
-    { icon: <GitBranch size={14} />, label: "Repositories",       count: 6,  color: "text-cyan-400" },
-    { icon: <Terminal size={14} />,  label: "Scripts / Artifacts", count: 4, color: "text-pink-400" },
+  const riskFilterOptions: Array<{ value: RiskLevel | "all"; label: string }> = [
+    { value: "all", label: "All risk" },
+    { value: "BANNED", label: "Banned" },
+    { value: "RED", label: "High risk" },
+    { value: "ORANGE", label: "Elevated" },
+    { value: "YELLOW", label: "Monitor" },
+    { value: "GREEN", label: "Low risk" },
   ];
+  const riskHeaderOptions = riskFilterOptions.filter((option): option is { value: RiskLevel; label: string } => option.value !== "all");
+
+  const typeFilterOptions: Array<{ value: Report["reportedIdentifierType"]; label: string }> = Object.entries(IDENTIFIER_TYPE_LABEL).map(([value, label]) => ({
+    value: value as Report["reportedIdentifierType"],
+    label,
+  }));
+
+  const riskRank: Record<RiskLevel, number> = {
+    BANNED: 5,
+    RED: 4,
+    ORANGE: 3,
+    YELLOW: 2,
+    GREEN: 1,
+  };
+
+  function recencyRank(value: string) {
+    if (value.includes("h ago")) return Number(value.replace("h ago", "")) || 0;
+    if (value.includes("d ago")) return (Number(value.replace("d ago", "")) || 0) * 24;
+    return 999;
+  }
+
+  const visibleSuspects = REPORTS
+    .filter(row => {
+      const query = searchQuery.trim().toLowerCase();
+      const matchesQuery = !query
+        || row.reportedIdentifier.toLowerCase().includes(query)
+        || row.type.toLowerCase().includes(query)
+        || row.platform.toLowerCase().includes(query);
+      const matchesType = typeFilters.length === 0 || typeFilters.includes(row.reportedIdentifierType);
+      const matchesRisk = riskFilters.length === 0 || riskFilters.includes(row.risk);
+      return matchesQuery && matchesType && matchesRisk;
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "risk") comparison = riskRank[a.risk] - riskRank[b.risk] || a.score - b.score;
+      if (sortBy === "reporters") comparison = a.corroborationCount - b.corroborationCount;
+      if (sortBy === "last_seen") comparison = recencyRank(a.lastActivity) - recencyRank(b.lastActivity);
+      if (sortBy === "identifier") comparison = a.reportedIdentifier.localeCompare(b.reportedIdentifier);
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+  const totalPages = Math.max(1, Math.ceil(visibleSuspects.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const pagedSuspects = visibleSuspects.slice(startIndex, startIndex + pageSize);
+  const visibleStart = visibleSuspects.length === 0 ? 0 : startIndex + 1;
+  const visibleEnd = Math.min(startIndex + pageSize, visibleSuspects.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, typeFilters, riskFilters, sortBy, sortDirection]);
+
+  function resetFilters() {
+    setSearchQuery("");
+    setTypeFilters([]);
+    setRiskFilters([]);
+    setSortBy("risk");
+    setSortDirection("desc");
+    setOpenHeaderFilter(null);
+    setPage(1);
+  }
+
+  function toggleTypeFilter(value: Report["reportedIdentifierType"]) {
+    setTypeFilters(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
+  }
+
+  function toggleRiskFilter(value: RiskLevel) {
+    setRiskFilters(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
+  }
+
+  function handleSort(nextSort: typeof sortBy) {
+    setOpenHeaderFilter(null);
+    if (sortBy === nextSort) {
+      setSortDirection(current => current === "asc" ? "desc" : "asc");
+      return;
+    }
+
+    setSortBy(nextSort);
+    setSortDirection(nextSort === "identifier" || nextSort === "last_seen" ? "asc" : "desc");
+  }
+
+  function renderSortIcon(column: typeof sortBy) {
+    if (sortBy !== column) return <ChevronDown size={10} className="opacity-40" />;
+    return sortDirection === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />;
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-6 py-3.5 border-b border-border flex-shrink-0">
         <div>
-          <h1 className="text-lg font-semibold text-foreground leading-none" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.03em" }}>ENTITY REGISTRY</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Identifiers extracted across all your case reports, with aggregate corroboration counts from other reporters.</p>
+          <h1 className="text-lg font-semibold text-foreground leading-none" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.03em" }}>SUSPECTS</h1>
+          <p className="text-[11px] text-muted-foreground mt-0.5">People, domains, wallets, repos, and identifiers extracted from your reports, with aggregate corroboration counts from other reporters.</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
           <Search size={13} className="text-muted-foreground" />
-          <input placeholder="Search entities…" className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-44" style={{ fontFamily: "var(--font-body)" }} />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search suspects…"
+            className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-44"
+            style={{ fontFamily: "var(--font-body)" }}
+          />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {types.map((t, i) => (
-            <div key={i} className="px-4 py-4 border border-border hover:border-border/80 cursor-pointer transition-colors" style={{ background: "var(--card)" }}>
-              <div className={`mb-2 ${t.color}`}>{t.icon}</div>
-              <div className="text-2xl font-bold text-foreground mb-0.5" style={{ fontFamily: "var(--font-display)" }}>{t.count}</div>
-              <div className="text-[11px] text-muted-foreground">{t.label}</div>
+        <div className="border border-border mb-5" style={{ background: "var(--card)" }}>
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
+            <SectionHeader>Filters</SectionHeader>
+            <div className="flex items-center gap-3">
+              <div className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>
+                {visibleSuspects.length} of {REPORTS.length} suspects
+              </div>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="h-7 flex items-center justify-center gap-1.5 px-2.5 text-[10px] text-muted-foreground border border-border hover:text-foreground hover:bg-white/5 transition-colors"
+                style={{ background: "rgba(255,255,255,0.03)", fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+              >
+                <RefreshCw size={11} />
+                RESET
+              </button>
             </div>
-          ))}
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>TYPE</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTypeFilters([])}
+                  className={`h-8 px-3 border text-[11px] transition-colors ${typeFilters.length === 0 ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-border text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                  style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                >
+                  All types
+                </button>
+                {typeFilterOptions.map(option => {
+                  const active = typeFilters.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => toggleTypeFilter(option.value)}
+                      className={`h-8 px-3 border text-[11px] transition-colors ${active ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-border text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                      style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>RISK</span>
+              <div className="flex flex-wrap gap-2">
+                {riskFilterOptions.map(option => {
+                  const active = option.value === "all" ? riskFilters.length === 0 : riskFilters.includes(option.value);
+                  const riskStyle = option.value === "all" ? null : RISK_CONFIG[option.value];
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => option.value === "all" ? setRiskFilters([]) : toggleRiskFilter(option.value)}
+                      className={`h-8 px-3 border text-[11px] transition-colors ${active ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-border text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                      style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        {riskStyle && <span className={`w-1.5 h-1.5 rounded-full ${riskStyle.dot}`} />}
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="border border-border" style={{ background: "var(--card)" }}>
           <div className="px-5 py-3 border-b border-border">
-            <SectionHeader>Recent Entities</SectionHeader>
+            <SectionHeader>Recent Suspects</SectionHeader>
           </div>
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-border">
-                {["Identifier", "Type", "Reporters", "Risk", "Last Seen"].map(h => (
-                  <th key={h} className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>{h}</th>
-                ))}
+                <th className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                  <button type="button" onClick={() => handleSort("identifier")} className={`inline-flex items-center gap-1 hover:text-foreground ${sortBy === "identifier" ? "text-amber-400" : ""}`}>
+                    Identifier
+                    {renderSortIcon("identifier")}
+                  </button>
+                </th>
+                <th className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground relative" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenHeaderFilter(openHeaderFilter === "type" ? null : "type")}
+                    className={`inline-flex items-center gap-1 hover:text-foreground ${typeFilters.length > 0 ? "text-amber-400" : ""}`}
+                  >
+                    Type
+                    <SlidersHorizontal size={10} />
+                  </button>
+                  {openHeaderFilter === "type" && (
+                    <div className="absolute left-4 top-8 z-20 w-56 border border-border p-2 shadow-xl" style={{ background: "var(--card)" }}>
+                      <button
+                        type="button"
+                        onClick={() => setTypeFilters([])}
+                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left text-[10px] ${typeFilters.length === 0 ? "text-amber-400" : "text-muted-foreground hover:text-foreground"}`}
+                        style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                      >
+                        All types
+                        <span className="w-3">{typeFilters.length === 0 ? "✓" : ""}</span>
+                      </button>
+                      {typeFilterOptions.map(option => (
+                        <label key={option.value} className="flex items-center gap-2 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}>
+                          <input
+                            type="checkbox"
+                            checked={typeFilters.includes(option.value)}
+                            onChange={() => toggleTypeFilter(option.value)}
+                            className="accent-amber-500"
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </th>
+                <th className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                  <button type="button" onClick={() => handleSort("reporters")} className={`inline-flex items-center gap-1 hover:text-foreground ${sortBy === "reporters" ? "text-amber-400" : ""}`}>
+                    Reporters
+                    {renderSortIcon("reporters")}
+                  </button>
+                </th>
+                <th className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground relative" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenHeaderFilter(openHeaderFilter === "risk" ? null : "risk")}
+                    className={`inline-flex items-center gap-1 hover:text-foreground ${riskFilters.length > 0 ? "text-amber-400" : ""}`}
+                  >
+                    Risk
+                    <SlidersHorizontal size={10} />
+                  </button>
+                  {openHeaderFilter === "risk" && (
+                    <div className="absolute left-4 top-8 z-20 w-52 border border-border p-2 shadow-xl" style={{ background: "var(--card)" }}>
+                      <button
+                        type="button"
+                        onClick={() => setRiskFilters([])}
+                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left text-[10px] ${riskFilters.length === 0 ? "text-amber-400" : "text-muted-foreground hover:text-foreground"}`}
+                        style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                      >
+                        All risk
+                        <span className="w-3">{riskFilters.length === 0 ? "✓" : ""}</span>
+                      </button>
+                      {riskHeaderOptions.map(option => {
+                        const riskStyle = RISK_CONFIG[option.value];
+                        return (
+                          <label key={option.value} className="flex items-center gap-2 px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground cursor-pointer" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}>
+                            <input
+                              type="checkbox"
+                              checked={riskFilters.includes(option.value)}
+                              onChange={() => toggleRiskFilter(option.value)}
+                              className="accent-amber-500"
+                            />
+                            <span className={`w-1.5 h-1.5 rounded-full ${riskStyle.dot}`} />
+                            {option.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </th>
+                <th className="text-left px-4 py-2 text-[10px] font-medium text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                  <button type="button" onClick={() => handleSort("last_seen")} className={`inline-flex items-center gap-1 hover:text-foreground ${sortBy === "last_seen" ? "text-amber-400" : ""}`}>
+                    Last Seen
+                    {renderSortIcon("last_seen")}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {[
-                { identifier: "linkedin.com/in/alex-morgan-recruiter", type: "LinkedIn URL", reporters: 14, risk: "RED"    as RiskLevel, seen: "09:31" },
-                { identifier: "techventuresdao.io",                    type: "Domain",       reporters: 8,  risk: "RED"    as RiskLevel, seen: "08:20" },
-                { identifier: "alex.morgan@meta-careers.io",           type: "Email",        reporters: 9,  risk: "RED"    as RiskLevel, seen: "09:42" },
-                { identifier: "0x7a3f…c82e",                           type: "Wallet",       reporters: 3,  risk: "RED"    as RiskLevel, seen: "07:44" },
-                { identifier: "github.com/devhire-solutions",           type: "GitHub URL",   reporters: 3,  risk: "ORANGE" as RiskLevel, seen: "Yesterday" },
-                { identifier: "sarah.chen@deloitte-consulting.net",     type: "Email",        reporters: 2,  risk: "YELLOW" as RiskLevel, seen: "3d ago" },
-              ].map((row, i) => (
-                <tr key={i} className="border-b border-border hover:bg-white/5 cursor-pointer transition-colors">
-                  <td className="px-4 py-2.5"><Monospace className="text-foreground/70">{row.identifier}</Monospace></td>
-                  <td className="px-4 py-2.5 text-[11px] text-muted-foreground">{row.type}</td>
-                  <td className="px-4 py-2.5"><Monospace className="text-muted-foreground">{row.reporters}</Monospace></td>
+              {pagedSuspects.map(row => (
+                <tr
+                  key={row.id}
+                  onClick={() => onSelectSuspect(row.id)}
+                  className="border-b border-border hover:bg-white/5 cursor-pointer transition-colors group"
+                >
+                  <td className="px-4 py-2.5"><Monospace className="text-foreground/70">{row.reportedIdentifier}</Monospace></td>
+                  <td className="px-4 py-2.5 text-[11px] text-muted-foreground">{IDENTIFIER_TYPE_LABEL[row.reportedIdentifierType]}</td>
+                  <td className="px-4 py-2.5"><Monospace className="text-muted-foreground">{row.corroborationCount}</Monospace></td>
                   <td className="px-4 py-2.5"><RiskBadge level={row.risk} size="sm" /></td>
-                  <td className="px-4 py-2.5"><Monospace className="text-muted-foreground">{row.seen}</Monospace></td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Monospace className="text-muted-foreground">{row.lastActivity}</Monospace>
+                      <ChevronRight size={13} className="text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                    </div>
+                  </td>
                 </tr>
               ))}
+              {visibleSuspects.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No suspects match the current filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
+          <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-3">
+            <div className="text-[10px] text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>
+              Showing {visibleStart}-{visibleEnd} of {visibleSuspects.length}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="h-8 px-3 border border-border text-[11px] text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:text-foreground hover:bg-white/5 transition-colors"
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+              >
+                PREV
+              </button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map(pageNumber => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => setPage(pageNumber)}
+                  className={`h-8 min-w-8 px-2 border text-[11px] transition-colors ${currentPage === pageNumber ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-border text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                  style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="h-8 px-3 border border-border text-[11px] text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:text-foreground hover:bg-white/5 transition-colors"
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}
+              >
+                NEXT
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1317,7 +1666,7 @@ function ExtensionView() {
     setQaMessages(prev => [
       ...prev,
       { role: "user",      content: qaInput },
-      { role: "assistant", content: "Based on current case data: this matches a documented recruiter fraud pattern (94% confidence). 14 independent reports describe identical equipment purchase requests for this entity. Do not share payment details." },
+      { role: "assistant", content: "Based on current report data: this matches a documented recruiter fraud pattern (94% confidence). 14 independent reports describe identical equipment purchase requests for this suspect. Do not share payment details." },
     ]);
     setQaInput("");
   }
@@ -1379,7 +1728,7 @@ function ExtensionView() {
             <div className="flex flex-col items-center py-6 gap-3">
               <Loader2 size={22} className="text-amber-400 animate-spin" />
               <div className="text-sm text-amber-400" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>ANALYZING…</div>
-              <div className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Extracting entities · Checking domain · Searching similar reports</div>
+              <div className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-data)" }}>Extracting suspects · Checking domain · Searching similar reports</div>
             </div>
           )}
         </div>
@@ -1620,7 +1969,7 @@ function ExtensionView() {
                 <div className="flex items-center gap-2">
                   <input value={qaInput} onChange={e => setQaInput(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && sendQa()}
-                    placeholder="Ask about this entity…"
+                    placeholder="Ask about this suspect…"
                     className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                     style={{ fontFamily: "var(--font-body)" }} />
                   <button onClick={sendQa} disabled={!qaInput.trim()}
@@ -1632,7 +1981,7 @@ function ExtensionView() {
             </div>
             <div className="px-3 pb-2.5">
               <p className="text-[9px] text-muted-foreground leading-relaxed" style={{ fontFamily: "var(--font-data)" }}>
-                Results are risk indicators, not accusations. Human review required before any public action.
+                Results are risk indicators, not accusations. ScamRadar does not publish or coordinate reports from user submissions.
               </p>
             </div>
           </>
@@ -1675,7 +2024,7 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-start gap-2">
                 <ShieldCheck size={12} className="text-amber-500 mt-0.5 flex-shrink-0" />
                 <p className="text-[10px] text-amber-400/80 leading-relaxed">
-                  Your submission is private by default. Materials are analyzed for risk indicators only — no automatic public actions are taken without human review.
+                  Your submission is private by default. The agent will accept it if enough material is provided for analysis, or ask for more context if not.
                 </p>
               </div>
             </div>
@@ -1751,7 +2100,7 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
               <CheckCircle size={22} className="text-green-400" />
             </div>
             <h3 className="text-base font-semibold text-foreground mb-1.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.04em" }}>MATERIAL RECEIVED</h3>
-            <p className="text-[11px] text-muted-foreground mb-1">Case SR-2024-0351 created. Real-time triage running now.</p>
+            <p className="text-[11px] text-muted-foreground mb-1">Report SR-2024-0351 accepted. Real-time triage is running now.</p>
             <Monospace className="text-amber-400 mb-6">3 subagents scheduled · ETA 4–8 min</Monospace>
             <div className="w-full p-3 border border-border mb-5 text-left" style={{ background: "rgba(255,255,255,0.03)" }}>
               <div className="flex items-start gap-2">
@@ -1775,17 +2124,28 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
 
-  function handleSelectCase(id: string) {
-    setSelectedCaseId(id);
-    setView("case");
+  function handleSelectReport(id: string) {
+    setSelectedReportId(id);
+    setView("report");
   }
 
-  function handleBack() {
-    setSelectedCaseId(null);
-    setView("dashboard");
+  function handleSelectSuspect(id: string) {
+    setSelectedSuspectId(id);
+    setView("suspects");
+  }
+
+  function handleReportBack() {
+    setSelectedReportId(null);
+    setView("report");
+  }
+
+  function handleSuspectBack() {
+    setSelectedSuspectId(null);
+    setView("suspects");
   }
 
   return (
@@ -1793,21 +2153,25 @@ export default function App() {
       <Sidebar
         view={view}
         setView={v => {
-          if (v !== "case") setSelectedCaseId(null);
+          setSelectedReportId(null);
+          setSelectedSuspectId(null);
           setView(v);
         }}
         onSubmit={() => setShowSubmit(true)}
       />
 
       <main className="flex-1 overflow-hidden">
-        {view === "dashboard" && <DashboardView onSelectCase={handleSelectCase} />}
-        {view === "case" && (
-          selectedCaseId
-            ? <CaseDetailView caseId={selectedCaseId} onBack={handleBack} />
-            : <CasesTable cases={CASES} onSelect={handleSelectCase} />
+        {view === "dashboard" && <DashboardView onSelectReport={handleSelectReport} />}
+        {view === "report" && (
+          selectedReportId
+            ? <ReportDetailView reportId={selectedReportId} onBack={handleReportBack} onOpenSuspect={handleSelectSuspect} />
+            : <ReportsTable reports={REPORTS} onSelect={handleSelectReport} />
         )}
-        {view === "queue"    && <ReviewerQueueView />}
-        {view === "entities"  && <EntitiesView />}
+        {view === "suspects" && (
+          selectedSuspectId
+            ? <SuspectDetailView suspectId={selectedSuspectId} onBack={handleSuspectBack} />
+            : <SuspectsView onSelectSuspect={handleSelectSuspect} />
+        )}
         {view === "extension" && <ExtensionView />}
       </main>
 
