@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type FormEvent, type ReactNode } from "react";
+import { analyzeWithSIE, isSIEConfigured, type SIEVerdict } from "../shared/sie";
 import {
   Shield, ShieldAlert, ShieldCheck,
   AlertTriangle, AlertCircle, Zap,
@@ -3241,11 +3242,37 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
   const [materialType, setMaterialType] = useState("conversation");
   const [text, setText] = useState("");
   const [notes, setNotes] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [verdict, setVerdict] = useState<SIEVerdict | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    if (!text.trim()) return;
+
+    setAnalyzing(true);
+    setError(null);
+
+    if (isSIEConfigured()) {
+      try {
+        const result = await analyzeWithSIE(text.trim());
+        setVerdict(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Analysis failed");
+      }
+    } else {
+      // No SIE endpoint configured — show a placeholder verdict
+      setVerdict({ score: 0, label: "clean", reason: "Live analysis unavailable: VITE_SIE_URL is not set." });
+    }
+
+    setAnalyzing(false);
+  }
+
+  function verdictRiskLevel(v: SIEVerdict): keyof typeof RISK_CONFIG {
+    if (v.score >= 8) return "RED";
+    if (v.score >= 6) return "ORANGE";
+    if (v.score >= 4) return "YELLOW";
+    return "GREEN";
   }
 
   return (
@@ -3262,7 +3289,13 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {!submitted ? (
+        {analyzing ? (
+          <div className="px-5 py-14 flex flex-col items-center text-center gap-4">
+            <Loader2 size={28} className="text-amber-400 animate-spin" />
+            <p className="text-sm text-muted-foreground" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>RUNNING SIE ANALYSIS…</p>
+            <Monospace className="text-amber-400/60">LLM verdict · cross-encoder rerank</Monospace>
+          </div>
+        ) : !verdict ? (
           <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
             <div className="p-3 border border-amber-500/20" style={{ background: "rgba(245,158,11,0.06)" }}>
               <div className="flex items-start gap-2">
@@ -3316,10 +3349,20 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
               />
             </div>
 
+            {error && (
+              <div className="p-3 border border-red-500/30" style={{ background: "rgba(239,68,68,0.08)" }}>
+                <div className="flex items-start gap-2">
+                  <XCircle size={12} className="text-red-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-[10px] text-red-400 leading-relaxed">{error}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-900 bg-amber-500 hover:bg-amber-400 transition-colors"
+                disabled={!text.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-900 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                 style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
               >
                 <Zap size={13} />
@@ -3339,24 +3382,56 @@ function SubmitModal({ onClose }: { onClose: () => void }) {
             </div>
           </form>
         ) : (
-          <div className="px-5 py-10 flex flex-col items-center text-center">
-            <div className="w-12 h-12 flex items-center justify-center mb-4" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)" }}>
-              <CheckCircle size={22} className="text-green-400" />
-            </div>
-            <h3 className="text-base font-semibold text-foreground mb-1.5" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.04em" }}>MATERIAL RECEIVED</h3>
-            <p className="text-[11px] text-muted-foreground mb-1">Report SR-2024-0351 accepted. Real-time triage is running now.</p>
-            <Monospace className="text-amber-400 mb-6">3 subagents scheduled · ETA 4–8 min</Monospace>
-            <div className="w-full p-3 border border-border mb-5 text-left" style={{ background: "rgba(255,255,255,0.03)" }}>
-              <div className="flex items-start gap-2">
-                <AlertCircle size={12} className="text-amber-500 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  No immediate danger indicators detected in initial scan. Full analysis pending. You will be notified when the risk assessment is complete.
-                </p>
+          <div className="px-5 py-8 flex flex-col gap-4">
+            {/* Score row */}
+            <div className="flex items-center gap-4">
+              <div
+                className="w-16 h-16 flex-shrink-0 flex items-center justify-center text-2xl font-bold border"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  background: RISK_CONFIG[verdictRiskLevel(verdict)].bg.replace("bg-", "rgba(").replace("/10", ",0.1)"),
+                  borderColor: RISK_CONFIG[verdictRiskLevel(verdict)].color + "44",
+                  color: RISK_CONFIG[verdictRiskLevel(verdict)].color,
+                }}
+              >
+                {verdict.score}
+              </div>
+              <div className="flex flex-col gap-1">
+                <RiskBadge level={verdictRiskLevel(verdict)} />
+                <Monospace className="text-[10px] text-muted-foreground uppercase">{verdict.label}</Monospace>
               </div>
             </div>
-            <button onClick={onClose} className="px-5 py-2 text-sm text-amber-900 bg-amber-500 hover:bg-amber-400 transition-colors" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>
-              VIEW DASHBOARD
-            </button>
+
+            {/* Reason */}
+            <div className="p-3 border border-border" style={{ background: "rgba(255,255,255,0.03)" }}>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">{verdict.reason}</p>
+            </div>
+
+            {/* Similar record */}
+            {verdict.topSimilarText && (
+              <div className="p-3 border border-amber-500/20" style={{ background: "rgba(245,158,11,0.06)" }}>
+                <p className="text-[10px] font-medium text-amber-400/80 mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}>MOST SIMILAR PREVIOUS SUBMISSION</p>
+                <p className="text-[10px] text-muted-foreground leading-relaxed truncate">{verdict.topSimilarText}</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => { setVerdict(null); setText(""); setNotes(""); }}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-900 bg-amber-500 hover:bg-amber-400 transition-colors"
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+              >
+                <Eraser size={13} />
+                ANALYZE ANOTHER
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border transition-colors"
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.06em" }}
+              >
+                CLOSE
+              </button>
+            </div>
           </div>
         )}
       </div>
