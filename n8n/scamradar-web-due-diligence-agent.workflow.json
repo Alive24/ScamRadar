@@ -1,0 +1,144 @@
+{
+  "name": "ScamRadar - Web Due Diligence Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scamradar/web-due-diligence",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7e6b5c77-dc08-4b84-88a5-cc1e9b0e1d41",
+      "name": "Webhook: Suspect Due Diligence",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ],
+      "webhookId": "scamradar-web-due-diligence"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst context = body.context ?? body.suspect ?? body;\nconst linkedReportIds = body.linked_report_ids ?? context.linked_report_ids ?? [];\nconst reports = context.reports ?? body.reports ?? [];\nconst now = new Date().toISOString();\n\nfunction asArray(value) {\n  if (!value) return [];\n  return Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);\n}\n\nfunction safeString(value) {\n  return typeof value === 'string' ? value.trim() : '';\n}\n\nfunction domainFromEmail(value) {\n  const text = safeString(value);\n  if (!text.includes('@')) return '';\n  return text.split('@').pop().toLowerCase();\n}\n\nfunction quote(value) {\n  const text = safeString(value).replace(/[\"\\n\\r]/g, ' ').replace(/\\s+/g, ' ').trim();\n  return text ? `\"${text}\"` : '';\n}\n\nfunction addQuery(set, value) {\n  const text = safeString(value).replace(/\\s+/g, ' ').trim();\n  if (text.length >= 3 && text.length <= 180) set.add(text);\n}\n\nconst primaryIdentifier = safeString(context.primary_identifier ?? context.identifier ?? body.primary_identifier);\nconst identifierType = safeString(context.identifier_type ?? body.identifier_type);\nconst suspectType = safeString(context.suspect_type ?? body.suspect_type ?? 'unknown');\nconst claimedName = safeString(context.claimed_name ?? context.display_label);\nconst claimedRole = safeString(context.claimed_role);\nconst claimedOrganization = safeString(context.claimed_organization ?? context.organization);\nconst knownDomains = new Set(asArray(context.known_domains));\nconst knownRepositories = asArray(context.known_repositories ?? context.repositories);\nconst knownUrls = asArray(context.known_urls ?? context.urls);\nconst knownWallets = asArray(context.known_wallets ?? context.wallets);\nconst knownMarketplaceHandles = asArray(context.known_marketplace_handles ?? context.marketplace_handles);\n\nif (identifierType === 'email' || primaryIdentifier.includes('@')) {\n  const domain = domainFromEmail(primaryIdentifier);\n  if (domain) knownDomains.add(domain);\n}\n\nfor (const url of knownUrls) {\n  try {\n    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);\n    if (parsed.hostname) knownDomains.add(parsed.hostname.replace(/^www\\./, ''));\n  } catch (error) {}\n}\n\nconst queries = new Set();\nif (primaryIdentifier && !primaryIdentifier.includes('@')) addQuery(queries, quote(primaryIdentifier));\nif (claimedName && claimedOrganization) addQuery(queries, `${quote(claimedName)} ${quote(claimedOrganization)}`);\nif (claimedOrganization && claimedRole) addQuery(queries, `${quote(claimedOrganization)} ${quote(claimedRole)} recruiter`);\n\nfor (const domain of knownDomains) {\n  addQuery(queries, `${quote(domain)} scam`);\n  addQuery(queries, `${quote(domain)} phishing`);\n  if (claimedOrganization) addQuery(queries, `${quote(domain)} ${quote(claimedOrganization)}`);\n}\n\nfor (const repo of knownRepositories) {\n  addQuery(queries, `${quote(repo)} malware`);\n  addQuery(queries, `${quote(repo)} npm install security`);\n}\n\nfor (const wallet of knownWallets) {\n  addQuery(queries, quote(wallet));\n  addQuery(queries, `${quote(wallet)} scam`);\n}\n\nfor (const handle of knownMarketplaceHandles) {\n  addQuery(queries, `${quote(handle)} scam`);\n  addQuery(queries, `${quote(handle)} fake escrow`);\n}\n\nfor (const report of reports) {\n  const summary = safeString(report.desensitized_summary ?? report.redacted_material).toLowerCase();\n  if (summary.includes('approved vendor')) addQuery(queries, '\"approved vendor\" \"reimburse after first paycheck\"');\n  if (summary.includes('off-platform') || summary.includes('off platform')) addQuery(queries, '\"off-platform\" \"equipment purchase\" job scam');\n  if (summary.includes('equipment purchase')) addQuery(queries, '\"equipment purchase\" \"job scam\"');\n}\n\nconst selectedQueries = [...queries].slice(0, 8);\nconst HARDCODED_TAVILY_API_KEY = '';\nconst HARDCODED_ATTIO_API_KEY = '';\nconst bodyTavilyApiKey = safeString(body.tavily_api_key ?? body.tavilyApiKey);\nconst bodyAttioApiKey = safeString(body.attio_api_key ?? body.attioApiKey);\nconst envTavilyApiKey = typeof $env !== 'undefined' ? $env.TAVILY_API_KEY : undefined;\nconst envAttioApiKey = typeof $env !== 'undefined' ? $env.ATTIO_API_KEY : undefined;\nconst varTavilyApiKey = typeof $vars !== 'undefined' ? $vars.TAVILY_API_KEY : undefined;\nconst varAttioApiKey = typeof $vars !== 'undefined' ? $vars.ATTIO_API_KEY : undefined;\nconst tavilyApiKey = HARDCODED_TAVILY_API_KEY || bodyTavilyApiKey || process.env.TAVILY_API_KEY || envTavilyApiKey || varTavilyApiKey;\nconst attioApiKey = HARDCODED_ATTIO_API_KEY || bodyAttioApiKey || process.env.ATTIO_API_KEY || envAttioApiKey || varAttioApiKey;\nconst errors = [];\nconst tavilyResults = [];\n\nif (!tavilyApiKey) {\n  errors.push('Missing Tavily API key. Paste it into HARDCODED_TAVILY_API_KEY, provide body.tavily_api_key, TAVILY_API_KEY env var, or TAVILY_API_KEY n8n variable.');\n}\n\nif (!selectedQueries.length) {\n  errors.push('No privacy-safe query ingredients were available.');\n}\n\nif (tavilyApiKey && selectedQueries.length) {\n  for (const query of selectedQueries) {\n    try {\n      const response = await fetch('https://api.tavily.com/search', {\n        method: 'POST',\n        headers: {\n          'content-type': 'application/json',\n          authorization: `Bearer ${tavilyApiKey}`\n        },\n        body: JSON.stringify({\n          query,\n          search_depth: 'basic',\n          max_results: 3,\n          include_answer: false,\n          include_raw_content: false\n        })\n      });\n\n      if (!response.ok) {\n        errors.push(`Tavily failed for ${query}: HTTP ${response.status}`);\n        continue;\n      }\n\n      const data = await response.json();\n      for (const result of data.results ?? []) {\n        tavilyResults.push({\n          search_query: query,\n          title: result.title ?? '',\n          url: result.url ?? '',\n          excerpt: result.content ?? '',\n          score: result.score ?? null\n        });\n      }\n    } catch (error) {\n      errors.push(`Tavily failed for ${query}: ${error.message}`);\n    }\n  }\n}\n\nconst byUrl = new Map();\nfor (const result of tavilyResults) {\n  if (!result.url || byUrl.has(result.url)) continue;\n  byUrl.set(result.url, result);\n}\n\nconst evidenceItems = [...byUrl.values()].map((source) => ({\n  claim: 'Public web source returned for privacy-safe suspect due diligence query.',\n  source_title: source.title,\n  source_url: source.url,\n  excerpt: source.excerpt.slice(0, 500),\n  retrieved_at: now,\n  search_query: source.search_query,\n  linked_suspect_id: context.suspect_id ?? body.suspect_id ?? null,\n  linked_report_ids: linkedReportIds,\n  confidence: source.score && source.score > 0.7 ? 'medium' : 'low'\n}));\n\nconst findings = [];\nif (!evidenceItems.length) {\n  findings.push({\n    type: 'no_reliable_result',\n    summary: 'No reliable public source was returned from the privacy-safe query set.',\n    linked_identifier: primaryIdentifier || null,\n    confidence: 'medium'\n  });\n} else {\n  findings.push({\n    type: 'needs_human_review',\n    summary: 'Public sources were found and should be reviewed before any user-facing conclusion is made.',\n    linked_identifier: primaryIdentifier || null,\n    confidence: 'medium'\n  });\n}\n\nif (claimedOrganization && evidenceItems.length && knownDomains.size) {\n  findings.push({\n    type: 'verification_gap',\n    summary: 'The workflow found public web material, but claimed affiliation still requires human verification against official sources.',\n    linked_identifier: [...knownDomains][0],\n    confidence: 'medium'\n  });\n}\n\nconst status = errors.length && evidenceItems.length ? 'partial' : errors.length ? 'failed' : 'completed';\nconst summary = status === 'completed'\n  ? 'Web due diligence completed with source-backed results queued for review.'\n  : status === 'partial'\n    ? 'Web due diligence partially completed; review returned evidence and errors.'\n    : 'Web due diligence could not complete with the available inputs and configuration.';\n\nconst output = {\n  agent_name: 'Web Due Diligence Agent',\n  status,\n  suspect_id: context.suspect_id ?? body.suspect_id ?? null,\n  suspect_object: body.suspect_object ?? context.suspect_object ?? null,\n  suspect_type: suspectType,\n  linked_report_ids: linkedReportIds,\n  queries: selectedQueries,\n  summary,\n  findings,\n  evidence_items: evidenceItems,\n  risk_indicator_updates: findings.map((finding) => ({\n    category: finding.type,\n    severity: finding.type === 'no_reliable_result' ? 'low' : 'medium',\n    description: finding.summary\n  })),\n  attio_writeback: {\n    update_suspect: {\n      web_due_diligence_status: status,\n      web_due_diligence_summary: summary,\n      last_investigated_at: now\n    },\n    create_agent_run: {\n      agent_name: 'Web Due Diligence Agent',\n      status,\n      started_at: body.started_at ?? now,\n      finished_at: now,\n      query_count: selectedQueries.length,\n      errors\n    },\n    create_sources_from_evidence_items: true,\n    create_evidence_items: evidenceItems,\n    create_risk_indicators: findings\n  },\n  requires_review: true,\n  errors\n};\n\nconst attioObject = output.suspect_object || 'people';\nconst attioRecordId = output.suspect_id;\noutput.attio_writeback_result = { status: 'skipped', reason: 'Missing Attio API key or Attio record id.' };\n\nif (attioApiKey && attioRecordId) {\n  const nextRiskLevel = evidenceItems.length ? 'YELLOW' : (context.risk_level || 'YELLOW');\n  const nextConfidence = status === 'completed' ? Math.max(Number(context.risk_score ?? 35), evidenceItems.length ? 55 : 35) : Number(context.risk_score ?? 35);\n  const findingsText = JSON.stringify({\n    agent_name: output.agent_name,\n    status: output.status,\n    summary: output.summary,\n    queries: output.queries,\n    findings: output.findings,\n    evidence_items: output.evidence_items.slice(0, 6),\n    errors: output.errors,\n    updated_at: now\n  }, null, 2).slice(0, 50000);\n\n  try {\n    const response = await fetch(`https://api.attio.com/v2/objects/${encodeURIComponent(attioObject)}/records/${encodeURIComponent(attioRecordId)}`, {\n      method: 'PATCH',\n      headers: {\n        'content-type': 'application/json',\n        authorization: `Bearer ${attioApiKey}`\n      },\n      body: JSON.stringify({\n        data: {\n          values: {\n            agent_findings: findingsText,\n            risk_level: nextRiskLevel,\n            confidence: nextConfidence\n          }\n        }\n      })\n    });\n\n    const responseText = await response.text();\n    if (!response.ok) {\n      output.attio_writeback_result = {\n        status: 'failed',\n        object: attioObject,\n        record_id: attioRecordId,\n        http_status: response.status,\n        error: responseText.slice(0, 500)\n      };\n      output.errors.push(`Attio writeback failed: HTTP ${response.status}`);\n      if (output.status === 'completed') output.status = 'partial';\n    } else {\n      output.attio_writeback_result = {\n        status: 'completed',\n        object: attioObject,\n        record_id: attioRecordId,\n        updated_fields: ['agent_findings', 'risk_level', 'confidence']\n      };\n    }\n  } catch (error) {\n    output.attio_writeback_result = {\n      status: 'failed',\n      object: attioObject,\n      record_id: attioRecordId,\n      error: error.message\n    };\n    output.errors.push(`Attio writeback failed: ${error.message}`);\n    if (output.status === 'completed') output.status = 'partial';\n  }\n}\n\nreturn [{ json: output }];"
+      },
+      "id": "0c6902cc-cad0-42a5-b372-df45afd17a5b",
+      "name": "Code: Run Web Due Diligence Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "355ea7da-83df-4139-8598-58f083cbfdf6",
+      "name": "Respond: Agent Output",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Paste Tavily and Attio keys into HARDCODED_TAVILY_API_KEY / HARDCODED_ATTIO_API_KEY in the agent Code node for a self-contained demo. This workflow now writes agent_findings, risk_level, and confidence back to Attio people records.",
+        "height": 220,
+        "width": 360
+      },
+      "id": "d928ebba-122a-4b10-b48c-65f99437495c",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "18b8f62f-48b9-41e3-8a02-b1f32cf7bc42",
+      "name": "Manual Trigger: Mock Chunteng Profile",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{\n  json: {\n    suspect_id: '6310b053-2e5d-472a-b82c-5c9945eeb65c',\n    suspect_object: 'people',\n    run_reason: 'manual_mock_trigger',\n    linked_report_ids: ['mock-report-chunteng-linkedin-001'],\n    context: {\n      suspect_id: '6310b053-2e5d-472a-b82c-5c9945eeb65c',\n      suspect_object: 'people',\n      suspect_type: 'linkedin_profile',\n      primary_identifier: 'https://www.linkedin.com/in/chunteng-xiao-b99763a4/',\n      identifier_type: 'linkedin_url',\n      display_label: 'Chunteng Xiao',\n      claimed_name: 'Chunteng Xiao',\n      claimed_role: 'Founder / Builder',\n      claimed_organization: 'ScamRadar',\n      known_domains: ['linkedin.com'],\n      known_urls: ['https://www.linkedin.com/in/chunteng-xiao-b99763a4/'],\n      known_repositories: [],\n      known_wallets: [],\n      known_marketplace_handles: [],\n      risk_level: 'YELLOW',\n      risk_score: 35,\n      corroboration_count: 1,\n      reports: [\n        {\n          report_id: 'mock-report-chunteng-linkedin-001',\n          platform: 'LinkedIn',\n          material_type: 'profile_url',\n          submitted_at: '2026-06-27T16:35:00Z',\n          redacted_material: 'Manual demo report for a public LinkedIn profile URL.',\n          desensitized_summary: 'Manual demo report asks the Web Due Diligence Agent to verify a public LinkedIn profile and claimed project affiliation.',\n          detected_indicators: ['manual_demo']\n        }\n      ]\n    },\n    attio_read_mock: {\n      object: 'people',\n      record_id: '6310b053-2e5d-472a-b82c-5c9945eeb65c',\n      note: 'Attio record was created by Codex MCP. n8n still needs an Attio API credential/node for live read/write.'\n    }\n  }\n}];"
+      },
+      "id": "7ffb9389-8c06-4d39-9b37-6f2e3d6606f3",
+      "name": "Mock: Chunteng Attio Person Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Suspect Due Diligence": {
+      "main": [
+        [
+          {
+            "node": "Code: Run Web Due Diligence Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Run Web Due Diligence Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond: Agent Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger: Mock Chunteng Profile": {
+      "main": [
+        [
+          {
+            "node": "Mock: Chunteng Attio Person Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock: Chunteng Attio Person Payload": {
+      "main": [
+        [
+          {
+            "node": "Code: Run Web Due Diligence Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "pinData": {}
+}

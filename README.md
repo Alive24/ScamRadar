@@ -13,6 +13,17 @@ The hackathon version keeps the core workflow runnable without external services
 - Mock async investigation status in the background worker.
 - Markdown report packet generation.
 
+## Current n8n/Attio Demo
+
+- n8n workflow: `ScamRadar - Web Due Diligence Agent`
+- n8n workflow ID: `qVjpOqdb9BgXEKLd`
+- Repo workflow JSON: `n8n/scamradar-web-due-diligence-agent.workflow.json`
+- Manual trigger: `Manual Trigger: Mock Chunteng Profile`
+- Attio mock record: `people/6310b053-2e5d-472a-b82c-5c9945eeb65c`
+- Current write-back fields: `agent_findings`, `risk_level`, `confidence`
+
+The current workflow writes a compact Tavily-derived summary back to the Attio `people` record. It is not yet incremental evidence insertion; separate Sources, Evidence Items, and Agent Runs remain target architecture.
+
 ## Commands
 
 ```bash
@@ -36,6 +47,7 @@ pnpm dev
 - [Architecture](docs/ARCHITECTURE.md)
 - [Attio Schema](docs/ATTIO_SCHEMA.md)
 - [n8n Workflows](docs/N8N_WORKFLOWS.md)
+- [Web Due Diligence Agent Workflow](docs/N8N_WEB_DUE_DILIGENCE_AGENT.md)
 - [Demo Plan](docs/DEMO_PLAN.md)
 - [Integration Notes](docs/INTEGRATIONS.md)
 
