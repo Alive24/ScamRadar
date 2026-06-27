@@ -62,10 +62,9 @@ Current dev workflow:
 - n8n workflow ID: `qVjpOqdb9BgXEKLd`.
 - Repo JSON: `n8n/scamradar-web-due-diligence-agent.workflow.json`.
 - Contains a webhook trigger plus a manual mock trigger for the Chunteng Xiao LinkedIn profile.
-- Uses hardcoded-key slots in the Code node for a self-contained demo:
-  - `HARDCODED_TAVILY_API_KEY`
-  - `HARDCODED_ATTIO_API_KEY`
-- Calls Tavily Search with `Authorization: Bearer <TAVILY_API_KEY>`.
+- Uses HTTP Request nodes for external API calls because n8n Cloud Code nodes cannot call `fetch`.
+- Calls Tavily Search from `HTTP: Tavily Search` with `Authorization: Bearer <TAVILY_API_KEY>`.
+- Writes to Attio from `HTTP: Attio Writeback` with `Authorization: Bearer <ATTIO_API_KEY>`.
 - Writes Tavily-derived summary results back to Attio `people.agent_findings`.
 
 ## Superlinked

@@ -40,14 +40,12 @@ Current Attio write-back target:
 
 Current write-back behavior is overwrite-based, not incremental. Each run writes a fresh JSON summary into `agent_findings`; it does not append to prior evidence and does not create separate `Sources`, `Evidence Items`, or `Agent Runs` records yet.
 
-Secrets are intentionally not committed. For a self-contained n8n demo, paste keys directly into the two constants in `Code: Run Web Due Diligence Agent`:
+Secrets are intentionally not committed. For a self-contained n8n demo, paste keys into the Authorization headers on:
 
-```js
-const HARDCODED_TAVILY_API_KEY = "";
-const HARDCODED_ATTIO_API_KEY = "";
-```
+- `HTTP: Tavily Search`: `Bearer <TAVILY_API_KEY>`
+- `HTTP: Attio Writeback`: `Bearer <ATTIO_API_KEY>`
 
-The code also accepts `body.tavily_api_key` and `body.attio_api_key` as fallbacks.
+Do not make external API calls from n8n Cloud Code nodes. The Code node sandbox has no network access, so `fetch`, `axios`, and similar HTTP clients fail at runtime. Code nodes in this workflow only prepare inputs and normalize outputs; Tavily and Attio calls are handled by HTTP Request nodes.
 
 Do not use `process.env`, `$env`, or `$vars` inside the current n8n Cloud Code node. The current n8n environment denies Code node env-var access and can fail the run with `access to env vars denied`.
 
@@ -77,7 +75,7 @@ Expected body:
 - Tavily API key.
 - Current n8n Cloud plan notes:
   - n8n Variables may not be available on the current plan.
-  - For the demo workflow, use the hardcoded constants in the Code node or pass keys in the webhook body.
+  - For the demo workflow, use the Authorization headers on the two HTTP Request nodes.
 
 ## Node Plan
 

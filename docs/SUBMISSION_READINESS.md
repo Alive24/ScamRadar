@@ -105,12 +105,10 @@ pnpm self-check
 pnpm build
 ```
 
-3. Paste demo-only Tavily and Attio keys into n8n UI constants:
+3. Paste demo-only Tavily and Attio keys into the n8n HTTP Request nodes:
 
-```js
-const HARDCODED_TAVILY_API_KEY = "";
-const HARDCODED_ATTIO_API_KEY = "";
-```
+- `HTTP: Tavily Search`: `Authorization: Bearer <TAVILY_API_KEY>`
+- `HTTP: Attio Writeback`: `Authorization: Bearer <ATTIO_API_KEY>`
 
 4. Execute `Manual Trigger: Mock Chunteng Profile` in n8n.
 5. Confirm Attio `people/6310b053-2e5d-472a-b82c-5c9945eeb65c` has updated `agent_findings`.

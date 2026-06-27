@@ -40,6 +40,7 @@ Current implementation:
 - Mock Attio read payload for Attio `people` record `6310b053-2e5d-472a-b82c-5c9945eeb65c`.
 - Tavily search with privacy-safe queries and no raw page content.
 - Attio REST write-back to the same `people` record.
+- External API calls run through n8n HTTP Request nodes. Code nodes do not call `fetch` because the n8n Cloud Code sandbox has no network access.
 
 Current write-back is intentionally compact:
 
@@ -91,6 +92,10 @@ nodes:
   - Manual Trigger: Mock Chunteng Profile
   - Mock: Chunteng Attio Person Payload
   - Code: Run Web Due Diligence Agent
+  - HTTP: Tavily Search
+  - Code: Build Agent Output
+  - HTTP: Attio Writeback
+  - Code: Finalize Agent Output
   - Respond: Agent Output
 ```
 
