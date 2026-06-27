@@ -274,6 +274,46 @@ async function loadAttioReports(): Promise<Report[]> {
   return Array.isArray(payload.reports) && payload.reports.length > 0 ? payload.reports : REPORTS;
 }
 
+function reportChatContext(report: Report) {
+  return [
+    `Report ID: ${report.id}`,
+    `Identifier: ${report.reportedIdentifier}`,
+    `Platform: ${report.platform}`,
+    `Type: ${report.type}`,
+    `Risk level: ${report.risk}`,
+    `Risk score: ${report.score}`,
+    `Status: ${report.status}`,
+    `Corroboration count: ${report.corroborationCount}`,
+    `Indicators: ${report.indicators.join("; ")}`,
+    `Summary: ${report.summary}`,
+  ].join("\n");
+}
+
+async function askFastModel(message: string, report: Report) {
+  const response = await fetch("/api/sie/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      context: reportChatContext(report),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Fast model unavailable: ${response.status}`);
+  }
+
+  return await response.json() as {
+    answer: string;
+    verdict?: {
+      scamScore: number;
+      label: "clean" | "suspicious" | "scam";
+      topSimilarRecord?: string;
+    };
+    source: "sie";
+  };
+}
+
 const ALERTS: Alert[] = [
   { id: 1, time: "09:42", severity: "CRITICAL", reportId: "SR-2024-0347", suspect: "linkedin.com/in/alex-morgan-recruiter", message: "Server update: payment request detected in the submitted material. Zelle amount: $2,400. Do not send funds.", read: false },
   { id: 2, time: "09:38", severity: "CRITICAL", reportId: "SR-2024-0341", suspect: "techventuresdao.io",                    message: "Server update: wallet address collection detected. Do not share crypto credentials.", read: false },
@@ -996,6 +1036,7 @@ function SuspectDetailView({ suspectId, onBack }: { suspectId: string; onBack: (
 
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
   const [input, setInput] = useState("");
+  const [isChatting, setIsChatting] = useState(false);
   const [activeTab, setActiveTab] = useState<"timeline" | "graph" | "community">("timeline");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -1003,14 +1044,36 @@ function SuspectDetailView({ suspectId, onBack }: { suspectId: string; onBack: (
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function sendMessage() {
-    if (!input.trim()) return;
+  async function sendMessage() {
+    const message = input.trim();
+    if (!message || isChatting) return;
+
+    setInput("");
+    setIsChatting(true);
     setMessages(prev => [
       ...prev,
-      { role: "user", content: input },
-      { role: "assistant", content: "Analyzing submitted materials and cross-referencing with available evidence… This is a demo response. In production, a fast LLM provides real-time answers based on report data, Tavily search results, and Attio CRM records." },
+      { role: "user", content: message },
+      { role: "assistant", content: "Checking this against the current suspect context…" },
     ]);
-    setInput("");
+
+    try {
+      const result = await askFastModel(message, c);
+      const suffix = result.verdict
+        ? `\n\nFast model signal: ${result.verdict.label}, risk score ${result.verdict.scamScore}/10.`
+        : "";
+
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: `${result.answer}${suffix}` },
+      ]);
+    } catch {
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: "Analyzing submitted materials and cross-referencing with available evidence… This is a demo response. In production, a fast model provides real-time answers based on report data, Tavily search results, and Attio CRM records." },
+      ]);
+    } finally {
+      setIsChatting(false);
+    }
   }
 
   const timelineIcons: Record<string, ReactNode> = {
@@ -1316,9 +1379,9 @@ function SuspectDetailView({ suspectId, onBack }: { suspectId: string; onBack: (
             <button
               onClick={sendMessage}
               className="p-1.5 text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30"
-              disabled={!input.trim()}
+              disabled={!input.trim() || isChatting}
             >
-              <Send size={14} />
+              {isChatting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             </button>
           </div>
 
@@ -1975,6 +2038,7 @@ function ExtensionView() {
   const [promptInput, setPromptInput] = useState("");
   const [qaMessages, setQaMessages] = useState<ChatMessage[]>([]);
   const [qaInput, setQaInput] = useState("");
+  const [isQaChatting, setIsQaChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const identifierInputRef = useRef<HTMLInputElement>(null);
   const sessionSnapshotsRef = useRef<Record<ExtensionSessionKey, ExtensionSessionSnapshot>>({
@@ -2182,14 +2246,37 @@ function ExtensionView() {
     setStep("chat");
   }
 
-  function sendQa() {
-    if (!qaInput.trim()) return;
+  async function sendQa() {
+    const message = qaInput.trim();
+    if (!message || isQaChatting) return;
+
+    const currentSuspect = REPORTS.find(item => item.id === selectedExtensionSuspectId) ?? REPORTS[0];
+    setQaInput("");
+    setIsQaChatting(true);
     setQaMessages(prev => [
       ...prev,
-      { role: "user",      content: qaInput },
-      { role: "assistant", content: "Based on current report data: this matches a documented recruiter fraud pattern (94% confidence). 14 independent reports describe identical equipment purchase requests for this suspect. Do not share payment details." },
+      { role: "user", content: message },
+      { role: "assistant", content: "Checking current report context with the fast model…" },
     ]);
-    setQaInput("");
+
+    try {
+      const result = await askFastModel(message, currentSuspect);
+      const suffix = result.verdict
+        ? `\n\nFast model signal: ${result.verdict.label}, risk score ${result.verdict.scamScore}/10.`
+        : "";
+
+      setQaMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: `${result.answer}${suffix}` },
+      ]);
+    } catch {
+      setQaMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: "Based on current report data: this matches the saved ScamRadar indicators for this suspect. Treat this as risk guidance, not a definitive accusation, and avoid payment, credentials, code execution, or off-platform pressure until verified." },
+      ]);
+    } finally {
+      setIsQaChatting(false);
+    }
   }
 
   const report = REPORTS.find(item => item.id === selectedExtensionReportId) ?? REPORTS[0];
@@ -3038,9 +3125,9 @@ function ExtensionView() {
                     placeholder="Ask about this suspect…"
                     className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                     style={{ fontFamily: "var(--font-body)" }} />
-                  <button onClick={sendQa} disabled={!qaInput.trim()}
+                  <button onClick={sendQa} disabled={!qaInput.trim() || isQaChatting}
                     className="p-1.5 text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30">
-                    <Send size={13} />
+                    {isQaChatting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                   </button>
                 </div>
               )}

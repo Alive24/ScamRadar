@@ -1,6 +1,7 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { analyzeWithSIE, isSIEConfigured } from "./src/shared/sie";
 
 const REPORT_ORDER = [
   "SR-2024-0352",
@@ -174,21 +175,95 @@ function attioReportsPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), attioReportsPlugin()],
-  build: {
-    rollupOptions: {
-      input: {
-        index: "index.html",
-        popup: "popup.html",
-        background: "src/background/index.ts",
-        content: "src/content/index.ts"
-      },
-      output: {
-        entryFileNames: "assets/[name].js",
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name].[ext]"
+function readJsonBody(req: any) {
+  return new Promise<any>((resolve, reject) => {
+    let body = "";
+
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString("utf8");
+    });
+
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
+
+function sieChatPlugin() {
+  return {
+    name: "scamradar-sie-chat",
+    configureServer(server: any) {
+      server.middlewares.use("/api/sie/chat", async (req: any, res: any) => {
+        res.setHeader("Content-Type", "application/json");
+
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: "Method not allowed" }));
+          return;
+        }
+
+        if (!isSIEConfigured()) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: "SIE_URL is not configured" }));
+          return;
+        }
+
+        try {
+          const body = await readJsonBody(req);
+          const message = typeof body.message === "string" ? body.message.trim() : "";
+          const context = typeof body.context === "string" ? body.context : undefined;
+
+          if (!message) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: "message is required" }));
+            return;
+          }
+
+          const verdict = await analyzeWithSIE(message, context);
+
+          res.end(JSON.stringify({
+            answer: verdict.reason,
+            verdict,
+            source: "sie",
+          }));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "SIE chat failed" }));
+        }
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] ??= value;
+  }
+
+  return {
+    plugins: [react(), tailwindcss(), attioReportsPlugin(), sieChatPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: "index.html",
+          popup: "popup.html",
+          background: "src/background/index.ts",
+          content: "src/content/index.ts"
+        },
+        output: {
+          entryFileNames: "assets/[name].js",
+          chunkFileNames: "assets/[name].js",
+          assetFileNames: "assets/[name].[ext]"
+        }
       }
     }
-  }
+  };
 });
