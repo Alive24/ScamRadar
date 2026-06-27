@@ -23,14 +23,14 @@ The hackathon demo includes a complete visual prototype with both a Chrome Exten
 
 ## Partner Technologies
 
-The submission uses at least four partner technologies:
+The submission uses four partner technologies:
 
 | Partner technology | Current demo usage                                                                                                                                                                         |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Attio              | CRM/data availability layer. Stores the current mock suspect as a `people` record with ScamRadar fields and receives n8n write-back into `agent_findings`, `risk_level`, and `confidence`. |
 | n8n                | Subagent orchestration. Hosts `ScamRadar - Web Due Diligence Agent` with webhook and manual mock trigger paths.                                                                            |
 | Tavily             | Web due diligence search. The n8n agent builds privacy-safe queries, calls Tavily Search, dedupes source URLs, and writes summarized evidence back to Attio.                               |
-| Superlinked        | Vectorized similarity and retrieval layer for comparing submitted reports, suspect context, and document embeddings used by the chat/model experience.                                      |
+| Superlinked        | Real Time Vectorized similarity and retrieval layer for comparing submitted reports, suspect context, and document embeddings used by the chat/model experience.                                      |
 
 Additional integration boundaries are documented for Aikido/code-risk checks and SLNG/voice intake. The visual prototype also shows a fast chat-model Q&A surface and vectorized similarity matching.
 
